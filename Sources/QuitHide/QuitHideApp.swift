@@ -642,6 +642,7 @@ struct SettingsSheet: View {
             Text("每个 App 可分别设置离开前台后的等待时间和动作，重新激活后重新计时。\n隐藏：App 继续运行并隐藏窗口。\n退出：正常退出 App；未保存内容仍由 App 提醒。\n未设置：尚未选择规则。\n不处理：QuitHide 忽略该 App。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             if !model.statusMessage.isEmpty {
                 Text(model.statusMessage)
@@ -673,10 +674,27 @@ struct SettingsSheet: View {
                 }
 
                 if let statusText = updateStatusText {
-                    Text(statusText)
-                        .font(.caption)
-                        .foregroundStyle(updateStatusIsError ? Color.red : Color.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 7) {
+                        Image(systemName: updateStatusSymbol)
+                            .foregroundStyle(updateStatusColor)
+
+                        Text(statusText)
+                            .foregroundStyle(.primary)
+                    }
+                    .font(.callout.weight(.medium))
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        updateStatusColor.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(updateStatusColor.opacity(0.22), lineWidth: 0.5)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 Link(
@@ -713,9 +731,30 @@ struct SettingsSheet: View {
         }
     }
 
-    private var updateStatusIsError: Bool {
-        if case .failed = updateState { return true }
-        return false
+    private var updateStatusSymbol: String {
+        switch updateState {
+        case .upToDate:
+            return "checkmark.circle.fill"
+        case .available:
+            return "arrow.up.circle.fill"
+        case .failed:
+            return "exclamationmark.circle.fill"
+        case .idle, .checking:
+            return "info.circle.fill"
+        }
+    }
+
+    private var updateStatusColor: Color {
+        switch updateState {
+        case .upToDate:
+            return .green
+        case .available:
+            return .blue
+        case .failed:
+            return .red
+        case .idle, .checking:
+            return .secondary
+        }
     }
 
     private func handleUpdateButton() {
@@ -729,12 +768,18 @@ struct SettingsSheet: View {
             do {
                 switch try await UpdateChecker.check() {
                 case .upToDate:
-                    updateState = .upToDate
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        updateState = .upToDate
+                    }
                 case let .updateAvailable(update):
-                    updateState = .available(update)
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        updateState = .available(update)
+                    }
                 }
             } catch {
-                updateState = .failed
+                withAnimation(.easeOut(duration: 0.18)) {
+                    updateState = .failed
+                }
             }
         }
     }
@@ -753,7 +798,7 @@ private extension View {
 
 struct MenuContentView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var showSettings = false
+    @Environment(\.openWindow) private var openWindow
     @State private var ignoredExpanded = false
 
     private var automatedApps: [RunningAppItem] {
@@ -828,7 +873,7 @@ struct MenuContentView: View {
                 .help(model.automationEnabled ? "暂停自动处理" : "继续自动处理")
 
                 Button {
-                    showSettings = true
+                    openWindow(id: "settings")
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 16, weight: .medium))
@@ -971,10 +1016,6 @@ struct MenuContentView: View {
         .frame(width: 410, height: menuHeight)
         .animation(.easeInOut(duration: 0.16), value: menuHeight)
         .onAppear { model.refreshApps() }
-        .sheet(isPresented: $showSettings) {
-            SettingsSheet()
-                .environmentObject(model)
-        }
     }
 
     private func sectionHeader(_ title: String, count: Int) -> some View {
@@ -1012,5 +1053,11 @@ struct QuitHideApp: App {
             Label("QuitHide", systemImage: "rectangle.on.rectangle.slash")
         }
         .menuBarExtraStyle(.window)
+
+        Window("QuitHide 设置", id: "settings") {
+            SettingsSheet()
+                .environmentObject(model)
+        }
+        .windowResizability(.contentSize)
     }
 }
