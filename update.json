@@ -1,7 +1,7 @@
 {
-  "version": "0.2.1",
-  "build": 3,
+  "version": "0.2.2",
+  "build": 4,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "新增应用内检查更新；设置窗口改为独立窗口；优化更新结果提示并修复规则说明被截断的问题。",
-  "downloadURL": "https://github.com/1551255004/QuitHide/releases/tag/v0.2.1"
+  "releaseNotes": "精简设置页；仅显示简洁版本号；增加问题反馈微信，并保留每个 App 的独立等待时间设置。",
+  "downloadURL": "https://github.com/1551255004/QuitHide/releases/tag/v0.2.2"
 }
