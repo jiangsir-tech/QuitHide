@@ -73,10 +73,10 @@ enum UpdateCheckError: LocalizedError {
 
 enum UpdateChecker {
     private static let manifestURL = URL(
-        string: "https://raw.githubusercontent.com/1551255004/QuitHide/main/update.json"
+        string: "https://raw.githubusercontent.com/jiangsir-tech/QuitHide/main/update.json"
     )!
     private static let releasesURL = URL(
-        string: "https://api.github.com/repos/1551255004/QuitHide/releases?per_page=20"
+        string: "https://api.github.com/repos/jiangsir-tech/QuitHide/releases?per_page=20"
     )!
 
     private struct UpdateManifest: Decodable {

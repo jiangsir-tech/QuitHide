@@ -691,7 +691,7 @@ struct SettingsSheet: View {
 
                 Link(
                     "GitHub 项目",
-                    destination: URL(string: "https://github.com/1551255004/QuitHide")!
+                    destination: URL(string: "https://github.com/jiangsir-tech/QuitHide")!
                 )
                 .font(.caption)
             }
