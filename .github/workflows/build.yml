@@ -1,0 +1,15 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  universal-app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Universal 2 app
+        run: ./scripts/build-app.sh
+      - name: Verify architectures
+        run: lipo dist/QuitHide.app/Contents/MacOS/QuitHide -verify_arch arm64 x86_64
