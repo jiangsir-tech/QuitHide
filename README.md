@@ -4,6 +4,8 @@
 
 QuitHide 是一个原生 macOS 菜单栏工具，可以在 App 离开前台一段时间后，按独立规则自动隐藏或正常退出它。
 
+![QuitHide 菜单栏界面](assets/quithide-screenshot.png)
+
 ## 功能
 
 - 为每个正在运行的 App 分别设置“隐藏”“退出”或“不处理”

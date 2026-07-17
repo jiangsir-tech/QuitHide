@@ -4,6 +4,8 @@
 
 QuitHide is a native macOS menu bar utility that automatically hides or gracefully quits apps after they have stayed in the background for a configurable amount of time.
 
+![QuitHide menu bar interface](assets/quithide-screenshot.png)
+
 ## Features
 
 - Choose Hide, Quit, or Ignore independently for each running app
