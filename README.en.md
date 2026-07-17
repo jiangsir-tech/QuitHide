@@ -15,6 +15,7 @@ QuitHide is a native macOS menu bar utility that automatically hides or graceful
 - Hide or quit all matching apps immediately
 - Pause automation at any time
 - Optionally launch at login
+- View author and version information and check for updates in Settings
 - Leave every app unconfigured by default, so nothing is automated on first launch
 
 ## Requirements

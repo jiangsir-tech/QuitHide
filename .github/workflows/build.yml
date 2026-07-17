@@ -8,7 +8,9 @@ jobs:
   universal-app:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - name: Run tests
+        run: swift test
       - name: Build Universal 2 app
         run: ./scripts/build-app.sh
       - name: Verify architectures

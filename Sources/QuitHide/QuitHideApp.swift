@@ -595,6 +595,21 @@ struct AppRow: View {
 struct SettingsSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @State private var updateState: UpdateViewState = .idle
+
+    private enum UpdateViewState {
+        case idle
+        case checking
+        case upToDate
+        case available(AvailableUpdate)
+        case failed
+    }
+
+    private var versionText: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "版本 \(version)（构建 \(build)）"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -633,9 +648,106 @@ struct SettingsSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("关于 QuitHide")
+                    .font(.headline)
+
+                HStack(alignment: .center, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("作者：江sir爱数码")
+                        Text(versionText)
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.callout)
+
+                    Spacer()
+
+                    Button(updateButtonTitle) {
+                        handleUpdateButton()
+                    }
+                    .disabled(isChecking)
+                    .suppressFocusEffect()
+                }
+
+                if let statusText = updateStatusText {
+                    Text(statusText)
+                        .font(.caption)
+                        .foregroundStyle(updateStatusIsError ? Color.red : Color.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Link(
+                    "GitHub 项目",
+                    destination: URL(string: "https://github.com/1551255004/QuitHide")!
+                )
+                .font(.caption)
+            }
         }
         .padding(24)
         .frame(width: 410)
+    }
+
+    private var isChecking: Bool {
+        if case .checking = updateState { return true }
+        return false
+    }
+
+    private var updateButtonTitle: String {
+        if case .available = updateState { return "前往下载" }
+        return isChecking ? "正在检查…" : "检查更新"
+    }
+
+    private var updateStatusText: String? {
+        switch updateState {
+        case .idle, .checking:
+            return nil
+        case .upToDate:
+            return "当前已是最新版本"
+        case let .available(update):
+            return "发现新版本 \(update.version)"
+        case .failed:
+            return "检查失败，请稍后重试"
+        }
+    }
+
+    private var updateStatusIsError: Bool {
+        if case .failed = updateState { return true }
+        return false
+    }
+
+    private func handleUpdateButton() {
+        if case let .available(update) = updateState {
+            NSWorkspace.shared.open(update.downloadURL)
+            return
+        }
+
+        updateState = .checking
+        Task { @MainActor in
+            do {
+                switch try await UpdateChecker.check() {
+                case .upToDate:
+                    updateState = .upToDate
+                case let .updateAvailable(update):
+                    updateState = .available(update)
+                }
+            } catch {
+                updateState = .failed
+            }
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func suppressFocusEffect() -> some View {
+        if #available(macOS 14.0, *) {
+            focusEffectDisabled()
+        } else {
+            self
+        }
     }
 }
 
