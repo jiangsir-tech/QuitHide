@@ -607,8 +607,7 @@ struct SettingsSheet: View {
 
     private var versionText: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "版本 \(version)（构建 \(build)）"
+        return "版本 \(version)"
     }
 
     var body: some View {
@@ -619,15 +618,6 @@ struct SettingsSheet: View {
                 Spacer()
                 Button("完成") { dismiss() }
                     .keyboardShortcut(.defaultAction)
-            }
-
-            Toggle("启用空闲自动处理", isOn: $model.automationEnabled)
-
-            HStack {
-                Text("新规则默认时间")
-                Spacer()
-                Stepper("\(model.idleMinutes) 分钟", value: $model.idleMinutes, in: 1...240)
-                    .frame(width: 145)
             }
 
             Toggle("登录时启动", isOn: Binding(
@@ -659,6 +649,8 @@ struct SettingsSheet: View {
                 HStack(alignment: .center, spacing: 16) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("作者：江sir爱数码")
+                        Text("问题反馈微信：jsasm1")
+                            .textSelection(.enabled)
                         Text(versionText)
                             .foregroundStyle(.secondary)
                     }
