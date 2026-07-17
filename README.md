@@ -25,7 +25,7 @@ QuitHide 是一个原生 macOS 菜单栏工具，可以在 App 离开前台一�
 
 ## 下载与安装
 
-1. 从 [GitHub Releases](https://github.com/1551255004/QuitHide/releases) 下载最新的 `.dmg`。
+1. 从 [GitHub Releases](https://github.com/jiangsir-tech/QuitHide/releases) 下载最新的 `.dmg`。
 2. 打开 DMG，把 `QuitHide.app` 拖到“应用程序”文件夹。
 3. 启动 QuitHide，然后点击菜单栏图标设置规则。
 

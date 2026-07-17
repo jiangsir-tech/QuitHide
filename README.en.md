@@ -25,7 +25,7 @@ QuitHide is a native macOS menu bar utility that automatically hides or graceful
 
 ## Download and installation
 
-1. Download the latest `.dmg` from [GitHub Releases](https://github.com/1551255004/QuitHide/releases).
+1. Download the latest `.dmg` from [GitHub Releases](https://github.com/jiangsir-tech/QuitHide/releases).
 2. Open the DMG and drag `QuitHide.app` into Applications.
 3. Launch QuitHide and use its menu bar icon to configure app rules.
 
