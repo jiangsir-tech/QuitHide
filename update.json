@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0",
+  "build": 2,
+  "minimumSystemVersion": "13.0",
+  "releaseNotes": "首个公开 Beta 版本，支持为每个 App 单独设置隐藏、退出或不处理，并同时支持 Apple Silicon 和 Intel Mac。",
+  "downloadURL": "https://github.com/1551255004/QuitHide/releases/tag/v0.2.0"
+}

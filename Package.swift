@@ -11,6 +11,11 @@ let package = Package(
         .executableTarget(
             name: "QuitHide",
             path: "Sources/QuitHide"
+        ),
+        .testTarget(
+            name: "QuitHideTests",
+            dependencies: ["QuitHide"],
+            path: "Tests/QuitHideTests"
         )
     ],
     swiftLanguageModes: [.v5]
