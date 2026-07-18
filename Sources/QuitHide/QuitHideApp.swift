@@ -646,7 +646,7 @@ struct AppRow: View {
     }
 
     private var minuteOptions: [Int] {
-        let presets = [1, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240]
+        let presets = [2, 5, 10, 20, 60, 120, 300, 1_440]
         return Array(Set(presets + [model.idleMinutes(for: item.bundleIdentifier)])).sorted()
     }
 
@@ -714,6 +714,7 @@ struct AppRow: View {
 
     private func durationTitle(_ minutes: Int) -> String {
         if minutes < 60 { return "\(minutes) 分钟" }
+        if minutes.isMultiple(of: 1_440) { return "\(minutes / 1_440) 天" }
         if minutes.isMultiple(of: 60) { return "\(minutes / 60) 小时" }
         return "\(minutes / 60)时\(minutes % 60)分"
     }
@@ -721,7 +722,6 @@ struct AppRow: View {
 
 struct SettingsSheet: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.dismiss) private var dismiss
     @State private var updateState: UpdateViewState = .idle
 
     private enum UpdateViewState {
@@ -739,13 +739,8 @@ struct SettingsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("QuitHide 设置")
-                    .font(.title2.bold())
-                Spacer()
-                Button("完成") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
+            Text("QuitHide 设置")
+                .font(.title2.bold())
 
             Toggle("登录时启动", isOn: Binding(
                 get: { model.launchAtLogin },
@@ -779,6 +774,9 @@ struct SettingsSheet: View {
                         Text("问题反馈微信：jsasm1")
                             .textSelection(.enabled)
                         Text(versionText)
+                            .foregroundStyle(.secondary)
+                        Label("Developer ID 签名 · 已通过 Apple 公证", systemImage: "checkmark.shield")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     .font(.callout)
@@ -992,7 +990,7 @@ struct MenuContentView: View {
                 .help(model.automationEnabled ? "暂停自动处理" : "继续自动处理")
 
                 Button {
-                    openWindow(id: "settings")
+                    presentSettingsWindow()
                 } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 16, weight: .medium))
@@ -1145,6 +1143,20 @@ struct MenuContentView: View {
             Spacer()
         }
         .frame(height: 24)
+    }
+
+    private func presentSettingsWindow() {
+        openWindow(id: "settings")
+
+        // Menu-bar-only apps do not automatically become active when SwiftUI
+        // opens a window. Activate after the scene has created the NSWindow so
+        // the settings window appears in front without making it permanently
+        // float above every other app.
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            let settingsWindow = NSApp.windows.first { $0.title == "QuitHide 设置" }
+            settingsWindow?.makeKeyAndOrderFront(nil)
+        }
     }
 
     @ViewBuilder
