@@ -1,7 +1,7 @@
 {
-  "version": "0.2.3",
-  "build": 5,
+  "version": "0.2.4",
+  "build": 9,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "修复睡眠与暂停后计时提前触发、多实例状态互相干扰和失败动作重复执行等问题；改进退出请求与更新版本判断；正式安装包现已通过 Apple Developer ID 签名和公证。",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.2.3"
+  "releaseNotes": "修复设置窗口可能出现在其他 App 后方的问题；精简等待时间选项并增加最长 1 天；在关于区域显示 Developer ID 签名与 Apple 公证状态；移除多余的完成按钮。",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.2.4"
 }
