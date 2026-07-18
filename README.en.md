@@ -29,7 +29,7 @@ QuitHide is a native macOS menu bar utility that automatically hides or graceful
 2. Open the DMG and drag `QuitHide.app` into Applications.
 3. Launch QuitHide and use its menu bar icon to configure app rules.
 
-The current beta is not yet signed and notarized with an Apple Developer ID. If macOS blocks the first launch, review it under System Settings → Privacy & Security and choose Open Anyway. Only install builds downloaded from this repository's Releases page.
+Official release packages are signed with an Apple Developer ID and notarized by Apple. Only install builds downloaded from this repository's Releases page.
 
 ## How it works
 
@@ -41,14 +41,26 @@ Quit sends the standard macOS termination request rather than force-killing a pr
 
 ## Privacy
 
-QuitHide runs locally. It contains no network requests, analytics services, or third-party dependencies, and it does not upload running-app information or saved rules.
+QuitHide runs locally. It contains no analytics services or third-party dependencies, and it never uploads running-app information or saved rules. It accesses this project's GitHub update manifest or Releases page only when you explicitly click Check for Updates.
 
 ## Build from source
 
-The Apple Swift toolchain is required. Build the Universal 2 app with:
+The Apple Swift toolchain is required. Run the core regression tests first:
+
+```sh
+./scripts/test.sh
+```
+
+Then build the Universal 2 app with:
 
 ```sh
 ./scripts/build-app.sh
+```
+
+Maintainers can use the notarization credentials stored in Keychain to create a signed and notarized release:
+
+```sh
+./scripts/release-notarized.sh
 ```
 
 Create the DMG and its SHA-256 checksum for GitHub Releases with:

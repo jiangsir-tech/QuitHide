@@ -12,19 +12,37 @@ struct SemanticVersion: Comparable, Equatable {
             normalized.removeFirst()
         }
 
-        let versionParts = normalized.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+        let withoutBuildMetadata = normalized.split(
+            separator: "+",
+            maxSplits: 1,
+            omittingEmptySubsequences: false
+        )
+        guard !withoutBuildMetadata[0].isEmpty,
+              withoutBuildMetadata.count == 1 || !withoutBuildMetadata[1].isEmpty else { return nil }
+
+        let versionParts = withoutBuildMetadata[0].split(
+            separator: "-",
+            maxSplits: 1,
+            omittingEmptySubsequences: false
+        )
         let coreParts = versionParts[0].split(separator: ".", omittingEmptySubsequences: false)
         guard (1...3).contains(coreParts.count),
               let major = Int(coreParts[0]),
               coreParts.count < 2 || Int(coreParts[1]) != nil,
-              coreParts.count < 3 || Int(coreParts[2]) != nil else { return nil }
+              coreParts.count < 3 || Int(coreParts[2]) != nil,
+              major >= 0 else { return nil }
 
         self.major = major
         minor = coreParts.count > 1 ? Int(coreParts[1])! : 0
         patch = coreParts.count > 2 ? Int(coreParts[2])! : 0
+        guard minor >= 0, patch >= 0 else { return nil }
+
         prerelease = versionParts.count > 1 && !versionParts[1].isEmpty
             ? String(versionParts[1])
             : nil
+        if versionParts.count > 1, prerelease == nil {
+            return nil
+        }
     }
 
     static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
@@ -40,8 +58,33 @@ struct SemanticVersion: Comparable, Equatable {
         case (nil, .some):
             return false
         case let (.some(lhsValue), .some(rhsValue)):
-            return lhsValue.compare(rhsValue, options: [.numeric, .caseInsensitive]) == .orderedAscending
+            return comparePrerelease(lhsValue, rhsValue) == .orderedAscending
         }
+    }
+
+    private static func comparePrerelease(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let lhsParts = lhs.split(separator: ".", omittingEmptySubsequences: false)
+        let rhsParts = rhs.split(separator: ".", omittingEmptySubsequences: false)
+
+        for index in 0..<min(lhsParts.count, rhsParts.count) {
+            let lhsPart = lhsParts[index]
+            let rhsPart = rhsParts[index]
+            if lhsPart == rhsPart { continue }
+
+            switch (Int(lhsPart), Int(rhsPart)) {
+            case let (.some(lhsNumber), .some(rhsNumber)):
+                return lhsNumber < rhsNumber ? .orderedAscending : .orderedDescending
+            case (.some, .none):
+                return .orderedAscending
+            case (.none, .some):
+                return .orderedDescending
+            case (.none, .none):
+                return lhsPart.compare(rhsPart, options: .caseInsensitive)
+            }
+        }
+
+        if lhsParts.count == rhsParts.count { return .orderedSame }
+        return lhsParts.count < rhsParts.count ? .orderedAscending : .orderedDescending
     }
 }
 
@@ -119,7 +162,16 @@ enum UpdateChecker {
                 from: manifestURL,
                 session: session
             )
-            if manifest.build > currentBuild {
+            guard let currentVersion = SemanticVersion(currentVersionString),
+                  let availableVersion = SemanticVersion(manifest.version) else {
+                throw UpdateCheckError.invalidResponse
+            }
+            if isUpdateNewer(
+                currentVersion: currentVersion,
+                currentBuild: currentBuild,
+                availableVersion: availableVersion,
+                availableBuild: manifest.build
+            ) {
                 return .updateAvailable(AvailableUpdate(
                     version: manifest.version,
                     build: manifest.build,
@@ -134,6 +186,18 @@ enum UpdateChecker {
                 session: session
             )
         }
+    }
+
+    static func isUpdateNewer(
+        currentVersion: SemanticVersion,
+        currentBuild: Int,
+        availableVersion: SemanticVersion,
+        availableBuild: Int
+    ) -> Bool {
+        if currentVersion != availableVersion {
+            return currentVersion < availableVersion
+        }
+        return availableBuild > currentBuild
     }
 
     private static func checkGitHubReleases(

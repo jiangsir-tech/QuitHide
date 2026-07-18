@@ -6,7 +6,12 @@ INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 DIST_DIR="$PROJECT_DIR/dist"
 SOURCE_APP="$DIST_DIR/QuitHide.app"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
-DMG_NAME="QuitHide-v${VERSION}-universal-unsigned.dmg"
+SIGNING_IDENTITY="${QUITHIDE_SIGNING_IDENTITY:-}"
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+    DMG_NAME="QuitHide-v${VERSION}-universal.dmg"
+else
+    DMG_NAME="QuitHide-v${VERSION}-universal-unsigned.dmg"
+fi
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 CHECKSUM_PATH="$DMG_PATH.sha256"
 STAGING_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/QuitHide-release.XXXXXX")"
@@ -23,7 +28,6 @@ trap cleanup EXIT
 /bin/ln -s /Applications "$STAGING_DIR/dmg/Applications"
 
 /usr/bin/xattr -cr "$STAGING_DIR/dmg/QuitHide.app"
-/usr/bin/codesign --force --deep --sign - "$STAGING_DIR/dmg/QuitHide.app"
 /usr/bin/codesign --verify --deep --strict "$STAGING_DIR/dmg/QuitHide.app"
 /usr/bin/lipo "$STAGING_DIR/dmg/QuitHide.app/Contents/MacOS/QuitHide" -verify_arch arm64 x86_64
 
@@ -35,6 +39,15 @@ trap cleanup EXIT
     -ov \
     -format UDZO \
     "$DMG_PATH"
+
+if [[ -n "$SIGNING_IDENTITY" ]]; then
+    /usr/bin/codesign \
+        --force \
+        --timestamp \
+        --sign "$SIGNING_IDENTITY" \
+        "$DMG_PATH"
+    /usr/bin/codesign --verify --strict "$DMG_PATH"
+fi
 
 cd "$DIST_DIR"
 /usr/bin/shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"
