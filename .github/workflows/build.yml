@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Run tests
-        run: swift test
+        run: ./scripts/test.sh
       - name: Build Universal 2 app
         run: ./scripts/build-app.sh
       - name: Verify architectures

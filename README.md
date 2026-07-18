@@ -29,7 +29,7 @@ QuitHide 是一个原生 macOS 菜单栏工具，可以在 App 离开前台一�
 2. 打开 DMG，把 `QuitHide.app` 拖到“应用程序”文件夹。
 3. 启动 QuitHide，然后点击菜单栏图标设置规则。
 
-当前 Beta 版本尚未经过 Apple Developer ID 签名和公证。macOS 如果阻止首次打开，请在“系统设置 → 隐私与安全性”中确认来源后选择“仍要打开”。只应从本仓库的 Releases 页面下载安装包。
+正式发布的安装包使用 Apple Developer ID 签名并经过 Apple 公证。请只从本仓库的 Releases 页面下载安装包。
 
 ## 使用说明
 
@@ -41,14 +41,28 @@ QuitHide 是一个原生 macOS 菜单栏工具，可以在 App 离开前台一�
 
 ## 隐私
 
-QuitHide 在本机运行，不包含网络请求、分析服务或第三方依赖，也不会上传正在运行的 App 列表和用户规则。
+QuitHide 在本机运行，不包含分析服务或第三方依赖，也不会上传正在运行的 App 列表和用户规则。只有在用户主动点击“检查更新”时，才会访问本项目的 GitHub 更新清单或 Releases 页面。
 
 ## 从源码构建
 
-需要 Apple Swift 工具链。构建 Universal 2 App：
+需要 Apple Swift 工具链。
+
+先运行核心逻辑回归测试：
+
+```sh
+./scripts/test.sh
+```
+
+然后构建 Universal 2 App：
 
 ```sh
 ./scripts/build-app.sh
+```
+
+维护者可使用钥匙串中保存的公证凭据生成签名并公证的发布包：
+
+```sh
+./scripts/release-notarized.sh
 ```
 
 生成供 GitHub Releases 分发的 DMG 和 SHA-256 校验文件：

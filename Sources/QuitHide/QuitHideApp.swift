@@ -80,6 +80,7 @@ final class AppModel: ObservableObject {
     }
 
     private static let logger = Logger(subsystem: "com.jiangsir.quithide", category: "automation")
+    private static let retryDelay: TimeInterval = 30
     @Published var apps: [RunningAppItem] = []
     @Published var searchText = ""
     @Published var automationEnabled: Bool {
@@ -89,15 +90,9 @@ final class AppModel: ObservableObject {
 
             let now = Date()
             if automationEnabled {
-                if let pauseStartedAt {
-                    let pausedDuration = now.timeIntervalSince(pauseStartedAt)
-                    inactiveSince = inactiveSince.mapValues {
-                        $0.addingTimeInterval(pausedDuration)
-                    }
-                }
-                pauseStartedAt = nil
+                resumeTiming(for: .manualPause, at: now)
             } else {
-                pauseStartedAt = now
+                suspendTiming(for: .manualPause, at: now)
             }
         }
     }
@@ -120,7 +115,8 @@ final class AppModel: ObservableObject {
     private var inactiveSince: [String: Date] = [:]
     private var alreadyHandled: Set<String> = []
     private var actionFailures: [String: AutoAction] = [:]
-    private var pauseStartedAt: Date?
+    private var retryStates: [String: ActionRetryState] = [:]
+    private var timingSuspension = TimingSuspension()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
 
@@ -131,7 +127,7 @@ final class AppModel: ObservableObject {
         automationEnabled = defaults.object(forKey: Keys.automationEnabled) as? Bool ?? true
         idleMinutes = savedIdleMinutes
         if !automationEnabled {
-            pauseStartedAt = Date()
+            timingSuspension.suspend(for: .manualPause, at: Date())
         }
 
         // Earlier versions stored an explicit "不处理" choice as "never",
@@ -199,8 +195,7 @@ final class AppModel: ObservableObject {
             policyIdleMinutes[bundleIdentifier] = idleMinutes
             defaults.set(policyIdleMinutes, forKey: Keys.policyIdleMinutes)
         }
-        alreadyHandled.remove(bundleIdentifier)
-        actionFailures.removeValue(forKey: bundleIdentifier)
+        resetRuntimeState(for: bundleIdentifier, restartTimer: action.isAutomated)
         objectWillChange.send()
     }
 
@@ -211,29 +206,31 @@ final class AppModel: ObservableObject {
     func setIdleMinutes(_ minutes: Int, for bundleIdentifier: String) {
         policyIdleMinutes[bundleIdentifier] = max(minutes, 1)
         defaults.set(policyIdleMinutes, forKey: Keys.policyIdleMinutes)
-        alreadyHandled.remove(bundleIdentifier)
-        actionFailures.removeValue(forKey: bundleIdentifier)
+        clearActionState(for: bundleIdentifier)
         objectWillChange.send()
     }
 
     func automationStatus(for item: RunningAppItem) -> AppAutomationStatus? {
         let bundleID = item.bundleIdentifier
+        let runtimeID = item.id
         let action = policy(for: bundleID)
         guard action.isAutomated else { return nil }
 
-        if let failedAction = actionFailures[bundleID] {
-            return AppAutomationStatus(text: "\(failedAction.title)失败", isError: true)
-        }
-        if item.isActive {
-            return AppAutomationStatus(text: "使用中 · 离开后计时", isError: false)
+        if let failedAction = actionFailures[runtimeID] {
+            let retryText = retryStates[runtimeID]?.hasAttemptsRemaining == true ? " · 稍后重试" : " · 请手动重试"
+            return AppAutomationStatus(text: "\(failedAction.title)失败\(retryText)", isError: true)
         }
         if action == .hide, item.isHidden {
             return AppAutomationStatus(text: "已隐藏 · 激活后重计时", isError: false)
         }
-        if alreadyHandled.contains(bundleID) {
-            return AppAutomationStatus(text: "正在\(action.title)…", isError: false)
+        if alreadyHandled.contains(runtimeID) {
+            let text = action == .quit ? "已请求退出 · 等待 App 响应" : "正在\(action.title)…"
+            return AppAutomationStatus(text: text, isError: false)
         }
-        guard let inactiveAt = inactiveSince[bundleID] else {
+        if item.isActive {
+            return AppAutomationStatus(text: "使用中 · 离开后计时", isError: false)
+        }
+        guard let inactiveAt = inactiveSince[runtimeID] else {
             return AppAutomationStatus(text: "等待离开前台", isError: false)
         }
 
@@ -275,6 +272,7 @@ final class AppModel: ObservableObject {
                 on: item.app,
                 named: item.name,
                 bundleIdentifier: item.bundleIdentifier,
+                runtimeIdentifier: item.id,
                 automatic: false
             ) { [weak self] succeeded in
                 guard let self else { return }
@@ -286,10 +284,11 @@ final class AppModel: ObservableObject {
                 progress.remaining -= 1
 
                 if progress.remaining == 0 {
+                    let successText = action == .quit ? "已请求退出" : "已\(action.title)"
                     if progress.failed == 0 {
-                        self.statusMessage = "已\(action.title) \(progress.succeeded) 个 App"
+                        self.statusMessage = "\(successText) \(progress.succeeded) 个 App"
                     } else {
-                        self.statusMessage = "已\(action.title) \(progress.succeeded) 个，\(progress.failed) 个失败"
+                        self.statusMessage = "\(successText) \(progress.succeeded) 个，\(progress.failed) 个失败"
                     }
                 }
             }
@@ -324,18 +323,25 @@ final class AppModel: ObservableObject {
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
 
-        let runningBundleIDs = Set(running.map(\.bundleIdentifier))
-        let activeBundleIDs = Set(running.filter(\.isActive).map(\.bundleIdentifier))
-        for bundleID in runningBundleIDs {
-            if activeBundleIDs.contains(bundleID) {
-                inactiveSince.removeValue(forKey: bundleID)
-            } else if inactiveSince[bundleID] == nil {
-                inactiveSince[bundleID] = effectiveNow
+        let runningRuntimeIDs = Set(running.map(\.id))
+        for item in running {
+            let action = policy(for: item.bundleIdentifier)
+            if action == .hide, item.isHidden {
+                alreadyHandled.insert(item.id)
+                actionFailures.removeValue(forKey: item.id)
+                retryStates.removeValue(forKey: item.id)
+            }
+
+            if item.isActive || !action.isAutomated {
+                inactiveSince.removeValue(forKey: item.id)
+            } else if inactiveSince[item.id] == nil {
+                inactiveSince[item.id] = effectiveNow
             }
         }
-        inactiveSince = inactiveSince.filter { runningBundleIDs.contains($0.key) }
-        alreadyHandled.formIntersection(runningBundleIDs)
-        actionFailures = actionFailures.filter { runningBundleIDs.contains($0.key) }
+        inactiveSince = inactiveSince.filter { runningRuntimeIDs.contains($0.key) }
+        alreadyHandled.formIntersection(runningRuntimeIDs)
+        actionFailures = actionFailures.filter { runningRuntimeIDs.contains($0.key) }
+        retryStates = retryStates.filter { runningRuntimeIDs.contains($0.key) }
         apps = running
     }
 
@@ -362,11 +368,13 @@ final class AppModel: ObservableObject {
             queue: .main
         ) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  let bundleID = app.bundleIdentifier else { return }
+                  app.bundleIdentifier != nil else { return }
+            let runtimeID = Self.runtimeIdentifier(for: app)
             Task { @MainActor in
-                self?.inactiveSince.removeValue(forKey: bundleID)
-                self?.alreadyHandled.remove(bundleID)
-                self?.actionFailures.removeValue(forKey: bundleID)
+                self?.inactiveSince.removeValue(forKey: runtimeID)
+                self?.alreadyHandled.remove(runtimeID)
+                self?.actionFailures.removeValue(forKey: runtimeID)
+                self?.retryStates.removeValue(forKey: runtimeID)
                 self?.refreshApps()
             }
         })
@@ -378,11 +386,15 @@ final class AppModel: ObservableObject {
         ) { [weak self] notification in
             guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   let bundleID = app.bundleIdentifier else { return }
+            let runtimeID = Self.runtimeIdentifier(for: app)
             Task { @MainActor in
                 guard let self else { return }
-                self.inactiveSince[bundleID] = self.effectiveNow
-                self.alreadyHandled.remove(bundleID)
-                self.actionFailures.removeValue(forKey: bundleID)
+                if self.policy(for: bundleID).isAutomated {
+                    self.inactiveSince[runtimeID] = self.effectiveNow
+                }
+                self.alreadyHandled.remove(runtimeID)
+                self.actionFailures.removeValue(forKey: runtimeID)
+                self.retryStates.removeValue(forKey: runtimeID)
                 self.refreshApps()
             }
         })
@@ -392,6 +404,22 @@ final class AppModel: ObservableObject {
                 Task { @MainActor in self?.refreshApps() }
             })
         }
+
+        observers.append(center.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.suspendTiming(for: .systemSleep, at: Date()) }
+        })
+
+        observers.append(center.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.resumeTiming(for: .systemSleep, at: Date()) }
+        })
     }
 
     private func installTimer() {
@@ -408,24 +436,34 @@ final class AppModel: ObservableObject {
         refreshApps()
         guard automationEnabled else { return }
 
-        let now = Date()
+        let now = effectiveNow
 
         for item in apps {
             let bundleID = item.bundleIdentifier
+            let runtimeID = item.id
             let action = policy(for: bundleID)
             guard action.isAutomated,
                   !item.isActive,
-                  !alreadyHandled.contains(bundleID),
-                  let inactiveAt = inactiveSince[bundleID],
+                  !alreadyHandled.contains(runtimeID),
+                  retryStates[runtimeID]?.canAttempt(at: now) != false,
+                  let inactiveAt = inactiveSince[runtimeID],
                   now.timeIntervalSince(inactiveAt) >= thresholdSeconds(for: bundleID) else { continue }
 
-            perform(action, on: item.app, named: item.name, bundleIdentifier: bundleID, automatic: true)
+            perform(
+                action,
+                on: item.app,
+                named: item.name,
+                bundleIdentifier: bundleID,
+                runtimeIdentifier: runtimeID,
+                automatic: true
+            )
         }
     }
 
     private func immediateTargets(for action: AutoAction) -> [RunningAppItem] {
         apps.filter { item in
-            guard policy(for: item.bundleIdentifier) == action else { return false }
+            guard policy(for: item.bundleIdentifier) == action,
+                  !alreadyHandled.contains(item.id) else { return false }
             if action == .hide {
                 return !item.isHidden
             }
@@ -438,25 +476,43 @@ final class AppModel: ObservableObject {
         on app: NSRunningApplication,
         named name: String,
         bundleIdentifier: String,
+        runtimeIdentifier: String,
         automatic: Bool,
         completion: ((Bool) -> Void)? = nil
     ) {
+        let requestAccepted: Bool
         switch action {
         case .hide:
-            _ = app.hide()
+            requestAccepted = app.hide()
         case .quit:
-            _ = app.terminate()
+            requestAccepted = app.terminate()
         case .unset, .ignore:
             return
         }
 
-        alreadyHandled.insert(bundleIdentifier)
-        actionFailures.removeValue(forKey: bundleIdentifier)
+        alreadyHandled.insert(runtimeIdentifier)
+        actionFailures.removeValue(forKey: runtimeIdentifier)
         statusMessage = "正在\(action.title)：\(name)"
+
+        // A successful terminate() means macOS accepted the normal quit request.
+        // The target may remain alive while it asks the user to save or confirm;
+        // that is not an automation failure and should not trigger repeated prompts.
+        if action == .quit, requestAccepted {
+            finishAction(
+                action,
+                succeeded: true,
+                name: name,
+                bundleIdentifier: bundleIdentifier,
+                runtimeIdentifier: runtimeIdentifier,
+                automatic: automatic,
+                completion: completion
+            )
+            return
+        }
 
         // NSRunningApplication actions are asynchronous on recent macOS versions.
         // Verify the resulting state instead of trusting the immediate return value.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, app] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self, app] in
             guard let self else { return }
             let succeeded: Bool
             switch action {
@@ -468,18 +524,50 @@ final class AppModel: ObservableObject {
                 return
             }
 
-            if succeeded {
-                self.actionFailures.removeValue(forKey: bundleIdentifier)
-                self.statusMessage = "\(automatic ? "自动" : "已")\(action.title)：\(name)"
-                Self.logger.notice("Action succeeded: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public) automatic=\(automatic, privacy: .public)")
-            } else {
-                self.actionFailures[bundleIdentifier] = action
-                self.statusMessage = "无法\(action.title)：\(name)"
-                Self.logger.error("Action failed: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public) automatic=\(automatic, privacy: .public)")
-            }
-            completion?(succeeded)
-            self.refreshApps()
+            self.finishAction(
+                action,
+                succeeded: succeeded,
+                name: name,
+                bundleIdentifier: bundleIdentifier,
+                runtimeIdentifier: runtimeIdentifier,
+                automatic: automatic,
+                completion: completion
+            )
         }
+    }
+
+    private func finishAction(
+        _ action: AutoAction,
+        succeeded: Bool,
+        name: String,
+        bundleIdentifier: String,
+        runtimeIdentifier: String,
+        automatic: Bool,
+        completion: ((Bool) -> Void)?
+    ) {
+        if succeeded {
+            actionFailures.removeValue(forKey: runtimeIdentifier)
+            retryStates.removeValue(forKey: runtimeIdentifier)
+            statusMessage = action == .quit
+                ? "\(automatic ? "自动" : "已")请求退出：\(name)"
+                : "\(automatic ? "自动" : "已")\(action.title)：\(name)"
+            Self.logger.notice("Action succeeded: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public) automatic=\(automatic, privacy: .public)")
+        } else {
+            actionFailures[runtimeIdentifier] = action
+            var retryState = retryStates[runtimeIdentifier] ?? ActionRetryState()
+            retryState.recordFailure(at: effectiveNow, delay: Self.retryDelay)
+            retryStates[runtimeIdentifier] = retryState
+
+            if retryState.hasAttemptsRemaining {
+                alreadyHandled.remove(runtimeIdentifier)
+                statusMessage = "无法\(action.title)：\(name)，稍后重试"
+            } else {
+                statusMessage = "无法\(action.title)：\(name)，请手动重试"
+            }
+            Self.logger.error("Action failed: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public) attempt=\(retryState.failureCount, privacy: .public) automatic=\(automatic, privacy: .public)")
+        }
+        completion?(succeeded)
+        refreshApps()
     }
 
     private func refreshLoginStatus() {
@@ -487,7 +575,46 @@ final class AppModel: ObservableObject {
     }
 
     private var effectiveNow: Date {
-        pauseStartedAt ?? Date()
+        timingSuspension.effectiveNow
+    }
+
+    private func suspendTiming(for reason: TimingSuspension.Reason, at date: Date) {
+        timingSuspension.suspend(for: reason, at: date)
+    }
+
+    private func resumeTiming(for reason: TimingSuspension.Reason, at date: Date) {
+        guard let suspendedDuration = timingSuspension.resume(for: reason, at: date) else { return }
+        inactiveSince = inactiveSince.mapValues { $0.addingTimeInterval(suspendedDuration) }
+        retryStates = retryStates.mapValues { state in
+            var shifted = state
+            shifted.shiftRetryDate(by: suspendedDuration)
+            return shifted
+        }
+    }
+
+    private func resetRuntimeState(for bundleIdentifier: String, restartTimer: Bool) {
+        for item in apps where item.bundleIdentifier == bundleIdentifier {
+            alreadyHandled.remove(item.id)
+            actionFailures.removeValue(forKey: item.id)
+            retryStates.removeValue(forKey: item.id)
+            if restartTimer, !item.isActive {
+                inactiveSince[item.id] = effectiveNow
+            } else {
+                inactiveSince.removeValue(forKey: item.id)
+            }
+        }
+    }
+
+    private func clearActionState(for bundleIdentifier: String) {
+        for item in apps where item.bundleIdentifier == bundleIdentifier {
+            alreadyHandled.remove(item.id)
+            actionFailures.removeValue(forKey: item.id)
+            retryStates.removeValue(forKey: item.id)
+        }
+    }
+
+    nonisolated private static func runtimeIdentifier(for app: NSRunningApplication) -> String {
+        "\(app.bundleIdentifier ?? "unknown")#\(app.processIdentifier)"
     }
 
     private func thresholdSeconds(for bundleIdentifier: String) -> TimeInterval {

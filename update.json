@@ -1,7 +1,7 @@
 {
-  "version": "0.2.2",
-  "build": 4,
+  "version": "0.2.3",
+  "build": 5,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "精简设置页；仅显示简洁版本号；增加问题反馈微信，并保留每个 App 的独立等待时间设置。",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.2.2"
+  "releaseNotes": "修复睡眠与暂停后计时提前触发、多实例状态互相干扰和失败动作重复执行等问题；改进退出请求与更新版本判断；正式安装包现已通过 Apple Developer ID 签名和公证。",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.2.3"
 }
