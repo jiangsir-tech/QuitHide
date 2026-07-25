@@ -1,7 +1,7 @@
 {
-  "version": "0.2.4",
-  "build": 9,
+  "version": "0.3.0",
+  "build": 10,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "修复设置窗口可能出现在其他 App 后方的问题；精简等待时间选项并增加最长 1 天；在关于区域显示 Developer ID 签名与 Apple 公证状态；移除多余的完成按钮。",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.2.4"
+  "releaseNotes": "新增可离线保留、迁移和恢复的独立 App 规则；加入“运行中/全部规则”视图、默认隐藏与退出前隐藏、退出超时状态和需确认的手动强制退出；增加每日更新提醒，并严格校验版本、系统兼容性与下载地址；改进菜单高度及中英文名称排序。",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.3.0"
 }

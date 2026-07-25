@@ -4,14 +4,23 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   universal-app:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify release metadata
+        run: ./scripts/verify-release-metadata.sh
       - name: Run tests
         run: ./scripts/test.sh
       - name: Build Universal 2 app
         run: ./scripts/build-app.sh
       - name: Verify architectures
-        run: lipo dist/QuitHide.app/Contents/MacOS/QuitHide -verify_arch arm64 x86_64
+        run: |
+          lipo dist/QuitHide.app/Contents/MacOS/QuitHide -verify_arch arm64
+          lipo dist/QuitHide.app/Contents/MacOS/QuitHide -verify_arch x86_64
+      - name: Verify final app signature
+        run: codesign --verify --deep --strict --verbose=2 dist/QuitHide.app
