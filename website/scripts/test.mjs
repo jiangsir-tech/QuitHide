@@ -12,6 +12,25 @@ const styles = await readFile(path.join(outputDirectory, "styles.css"), "utf8");
 const edgeOne = JSON.parse(await readFile(path.resolve(outputDirectory, "../edgeone.json"), "utf8"));
 const chineseText = chinese.replace(/<[^>]+>/g, "");
 
+const darkSchemeMedia = styles.match(
+  /@media[^\{]*\(\s*prefers-color-scheme\s*:\s*dark\s*\)[^\{]*\{/i,
+);
+if (!darkSchemeMedia) {
+  throw new Error("Product site needs a prefers-color-scheme: dark media block");
+}
+
+const rootBlocks = [...styles.matchAll(/:root\s*\{([^}]*)\}/gi)];
+if (rootBlocks.length < 2) {
+  throw new Error("Product site needs separate light and dark :root theme token sets");
+}
+if (rootBlocks[1].index < darkSchemeMedia.index) {
+  throw new Error("The second :root theme token set must belong to the dark color-scheme override");
+}
+const themes = {
+  light: cssTheme(rootBlocks[0][1], "light"),
+  dark: cssTheme(rootBlocks[1][1], "dark"),
+};
+
 for (const [label, content] of [["Chinese page", chinese], ["English page", english]]) {
   if (content.includes("{{")) throw new Error(`${label} contains unresolved tokens`);
   if (!content.includes(`v${release.version}`)) throw new Error(`${label} has the wrong version`);
@@ -22,6 +41,7 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
   if (!content.includes(release.githubReleaseURL)) {
     throw new Error(`${label} is missing the GitHub release URL`);
   }
+  verifyThemeMetadata(label, content);
 }
 
 for (const copy of [
@@ -61,6 +81,28 @@ for (const [foreground, background] of [
   }
 }
 
+for (const [themeName, colors] of Object.entries(themes)) {
+  for (const [foreground, background] of [
+    ["text", "page"],
+    ["muted", "page"],
+    ["subtle", "surface"],
+    ["blue-on-soft", "soft"],
+    ["check-text", "soft"],
+    ["green", "badge-background"],
+    ["on-accent", "blue"],
+  ]) {
+    const ratio = contrastRatio(
+      themeColor(colors, foreground, themeName),
+      themeColor(colors, background, themeName),
+    );
+    if (ratio < 4.5) {
+      throw new Error(
+        `${themeName} theme ${foreground} on ${background} has insufficient contrast: ${ratio.toFixed(2)}:1`,
+      );
+    }
+  }
+}
+
 const appcastHeaders = edgeOne.headers?.find((rule) => rule.source === "/appcast.xml")?.headers;
 if (!appcastHeaders?.some(({ key, value }) => (
   key.toLowerCase() === "cache-control" && value.includes("must-revalidate")
@@ -79,6 +121,49 @@ function cssColor(name) {
   const match = styles.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i"));
   if (!match) throw new Error(`Missing CSS color variable: ${name}`);
   return match[1];
+}
+
+function cssTheme(block, name) {
+  const colors = {};
+  for (const match of block.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\s*;/gi)) {
+    colors[match[1].toLowerCase()] = match[2].toLowerCase();
+  }
+  if (Object.keys(colors).length === 0) {
+    throw new Error(`The ${name} :root theme token set has no hexadecimal colors`);
+  }
+  return colors;
+}
+
+function themeColor(theme, token, themeName) {
+  const color = theme[token];
+  if (!color) throw new Error(`Missing ${themeName} theme color variable: ${token}`);
+  return color;
+}
+
+function verifyThemeMetadata(label, content) {
+  const metadata = [...content.matchAll(/<meta\b[^>]*>/gi)].map(([tag]) => {
+    const attributes = {};
+    for (const match of tag.matchAll(/([a-z][a-z0-9:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {
+      attributes[match[1].toLowerCase()] = match[2] ?? match[3];
+    }
+    return attributes;
+  });
+
+  const colorScheme = metadata.find(({ name }) => name?.toLowerCase() === "color-scheme");
+  if (colorScheme?.content?.trim().toLowerCase().replace(/\s+/g, " ") !== "light dark") {
+    throw new Error(`${label} must declare color-scheme light dark`);
+  }
+
+  const themeColors = metadata.filter(({ name }) => name?.toLowerCase() === "theme-color");
+  for (const scheme of ["light", "dark"]) {
+    const expectedMedia = `(prefers-color-scheme:${scheme})`;
+    const match = themeColors.find(({ media }) => (
+      media?.toLowerCase().replace(/\s+/g, "") === expectedMedia
+    ));
+    if (!match || !/^#[0-9a-f]{6}$/i.test(match.content ?? "")) {
+      throw new Error(`${label} needs a hexadecimal ${scheme} theme-color with matching media`);
+    }
+  }
 }
 
 function contrastRatio(foreground, background) {
