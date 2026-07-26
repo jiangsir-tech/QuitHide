@@ -43,6 +43,7 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
   }
   verifyThemeMetadata(label, content);
   verifyDirectDownloadLinks(label, content, release.file.directDownloadURL);
+  verifyHeroDownloadMetadataLayout(label, content);
 }
 
 verifyDownloadCountMarkup(
@@ -77,7 +78,7 @@ if (
 
 for (const copy of [
   "在 Mac 上自动隐藏或退出不需要的 App",
-  "让精力更集中，让性能更集中。",
+  "节省人的精力，节省 Mac 的性能。",
 ]) {
   if (!chineseText.includes(copy)) throw new Error(`Chinese hero is missing approved copy: ${copy}`);
 }
@@ -232,6 +233,23 @@ function verifyDownloadCountMarkup(label, content, expectedCopy) {
   const visibleText = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   if (!visibleText.includes(expectedCopy)) {
     throw new Error(`${label} is missing the approved daily-updated download label`);
+  }
+}
+
+function verifyHeroDownloadMetadataLayout(label, content) {
+  const hero = content.match(/<section class="hero">([\s\S]*?)<\/section>/i)?.[1];
+  if (!hero) throw new Error(`${label} is missing the hero section`);
+
+  const facts = hero.match(/<div class="facts"[^>]*>([\s\S]*?)<\/div>/i);
+  const downloadCountIndex = hero.indexOf('<p class="download-count"');
+  if (!facts || downloadCountIndex === -1) {
+    throw new Error(`${label} is missing hero compatibility or download-count metadata`);
+  }
+  if (facts.index >= downloadCountIndex) {
+    throw new Error(`${label} must place compatibility details above the download count`);
+  }
+  if (/data-release-version/i.test(facts[1])) {
+    throw new Error(`${label} must not repeat the release version in hero compatibility details`);
   }
 }
 
