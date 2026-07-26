@@ -121,7 +121,9 @@ h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spa
 .button.primary:hover { background: var(--blue-hover); }
 .button.secondary { border-color: var(--secondary-border); background: var(--surface); }
 .button.secondary:hover { border-color: var(--secondary-hover-border); background: var(--secondary-hover-background); }
-.facts { display: flex; flex-wrap: wrap; gap: 8px 15px; margin-top: 23px; color: var(--muted); font-size: 13px; }
+.download-count { margin: 16px 0 0; color: var(--muted); font-size: 13px; }
+.download-count strong { color: var(--text); font-size: 14px; font-variant-numeric: tabular-nums; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 15px; margin-top: 12px; color: var(--muted); font-size: 13px; }
 .facts span + span::before { margin-right: 15px; color: var(--fact-divider); content: "·"; }
 
 .product-visual { position: relative; padding: 34px 34px 0; overflow: hidden; border: 1px solid var(--visual-border); border-radius: 28px; background: linear-gradient(145deg, var(--visual-start), var(--visual-end)); box-shadow: var(--shadow); }

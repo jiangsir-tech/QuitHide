@@ -42,6 +42,37 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
     throw new Error(`${label} is missing the GitHub release URL`);
   }
   verifyThemeMetadata(label, content);
+  verifyDirectDownloadLinks(label, content, release.file.directDownloadURL);
+}
+
+verifyDownloadCountMarkup(
+  "Chinese page",
+  chinese,
+  "累计下载 24 次 · 每日更新",
+);
+verifyDownloadCountMarkup(
+  "English page",
+  english,
+  "24 cumulative downloads · Updated daily",
+);
+
+const directDownloadURL = new URL(release.file.directDownloadURL);
+if (directDownloadURL.origin !== "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com") {
+  throw new Error("Direct product downloads must remain on the verified Hong Kong COS origin");
+}
+
+const downloadStatsSchedule = edgeOne.schedules?.filter(({ path: route }) => (
+  route === "/api/cron/aggregate-downloads"
+));
+if (downloadStatsSchedule?.length !== 1) {
+  throw new Error("EdgeOne needs exactly one scheduled download-stat aggregation job");
+}
+if (
+  downloadStatsSchedule[0].cron !== "17 0 * * *" ||
+  downloadStatsSchedule[0].method !== "POST" ||
+  downloadStatsSchedule[0].timezone !== "UTC"
+) {
+  throw new Error("Download statistics must refresh daily through the approved EdgeOne schedule");
 }
 
 for (const copy of [
@@ -163,6 +194,44 @@ function verifyThemeMetadata(label, content) {
     if (!match || !/^#[0-9a-f]{6}$/i.test(match.content ?? "")) {
       throw new Error(`${label} needs a hexadecimal ${scheme} theme-color with matching media`);
     }
+  }
+}
+
+function verifyDirectDownloadLinks(label, content, expectedURL) {
+  const links = [...content.matchAll(/<a\b[^>]*\bdata-direct-download\b[^>]*>/gi)];
+  if (links.length !== 3) {
+    throw new Error(`${label} must expose exactly three direct-download links`);
+  }
+  for (const [tag] of links) {
+    const href = tag.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find(Boolean);
+    if (href !== expectedURL) {
+      throw new Error(`${label} direct-download links must keep the verified COS URL`);
+    }
+  }
+  for (const [attribute, endpoint] of [
+    ["data-download-event", "/api/download-events"],
+    ["data-download-stats", "/api/download-stats"],
+  ]) {
+    if (!content.includes(`${attribute}="${endpoint}"`)) {
+      throw new Error(`${label} is missing ${attribute}=${endpoint}`);
+    }
+  }
+}
+
+function verifyDownloadCountMarkup(label, content, expectedCopy) {
+  const counters = [...content.matchAll(
+    /<([a-z][a-z0-9]*)\b([^>]*)\bdata-download-count\s*=\s*(?:"([^"]*)"|'([^']*)')([^>]*)>([^<]*)<\/\1>/gi,
+  )];
+  if (counters.length !== 1) {
+    throw new Error(`${label} must contain exactly one visible download counter`);
+  }
+  const initialValue = counters[0][3] ?? counters[0][4];
+  if (initialValue !== "24" || counters[0][6].trim() !== "24") {
+    throw new Error(`${label} download counter must render the static fallback value 24`);
+  }
+  const visibleText = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (!visibleText.includes(expectedCopy)) {
+    throw new Error(`${label} is missing the approved daily-updated download label`);
   }
 }
 

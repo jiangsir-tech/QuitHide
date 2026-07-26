@@ -3,6 +3,20 @@
   "installCommand": "npm install --ignore-scripts",
   "outputDirectory": "dist",
   "nodeVersion": "22.11.0",
+  "cloudFunctions": {
+    "nodejs": {
+      "maxDuration": 60
+    }
+  },
+  "schedules": [
+    {
+      "name": "refresh-download-stats",
+      "cron": "17 0 * * *",
+      "path": "/api/cron/aggregate-downloads",
+      "method": "POST",
+      "timezone": "UTC"
+    }
+  ],
   "headers": [
     {
       "source": "/release.json",

@@ -1,10 +1,33 @@
+import {
+  installDirectDownloadLogging,
+  refreshDownloadStats,
+} from "./download-stats-client.js";
+
 const root = document.documentElement;
 const feedURL = document.body.dataset.releaseFeed;
+const downloadEventURL = document.body.dataset.downloadEvent;
+const downloadStatsURL = document.body.dataset.downloadStats;
 const locale = root.lang === "en" ? "en" : "zh-CN";
 
 if (feedURL) refreshRelease(feedURL).catch(() => {
   document.body.dataset.releaseStatus = "static";
 });
+
+if (downloadStatsURL) {
+  refreshDownloadStats({
+    root: document,
+    url: downloadStatsURL,
+    locale,
+  }).then((updated) => {
+    document.body.dataset.downloadStatsStatus = updated ? "live" : "static";
+  }).catch(() => {
+    document.body.dataset.downloadStatsStatus = "static";
+  });
+}
+
+if (downloadEventURL) {
+  installDirectDownloadLogging({ root: document, url: downloadEventURL });
+}
 
 async function refreshRelease(url) {
   const controller = new AbortController();

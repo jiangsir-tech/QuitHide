@@ -30,7 +30,7 @@
   <script type="application/ld+json">{{SOFTWARE_JSON_LD_EN}}</script>
   <script type="module" src="/site.js"></script>
 </head>
-<body data-release-feed="{{RELEASE_FEED_URL}}">
+<body data-release-feed="{{RELEASE_FEED_URL}}" data-download-event="/api/download-events" data-download-stats="/api/download-stats">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="shell nav">
@@ -57,6 +57,9 @@
             <a class="button primary" data-direct-download href="{{DIRECT_DOWNLOAD_URL}}">Direct download <span data-release-version>v{{VERSION}}</span></a>
             <a class="button secondary" data-github-release href="{{GITHUB_RELEASE_URL}}">Download on GitHub</a>
           </div>
+          <p class="download-count" aria-live="polite" title="GitHub stable installer downloads plus direct-download clicks on this site">
+            <strong data-download-count="{{DOWNLOAD_TOTAL_FALLBACK}}">{{DOWNLOAD_TOTAL_FALLBACK}}</strong> cumulative downloads <span aria-hidden="true">·</span> Updated daily
+          </p>
           <div class="facts" aria-label="Compatibility">
             <span data-release-version>v{{VERSION}}</span>
             <span>macOS {{MINIMUM_SYSTEM_VERSION}}+</span>

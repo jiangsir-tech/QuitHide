@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { INITIAL_GITHUB_DOWNLOADS } from "../lib/download-stats-core.js";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const websiteDirectory = path.resolve(scriptDirectory, "..");
@@ -37,6 +38,7 @@ const replacements = {
   "{{DIRECT_DOWNLOAD_URL}}": release.file.directDownloadURL,
   "{{GITHUB_RELEASE_URL}}": release.githubReleaseURL,
   "{{GITHUB_DOWNLOAD_URL}}": release.file.githubDownloadURL,
+  "{{DOWNLOAD_TOTAL_FALLBACK}}": String(INITIAL_GITHUB_DOWNLOADS),
   "{{SOFTWARE_JSON_LD_ZH}}": JSON.stringify(
     softwareJSONLD(release, siteURL, "zh-CN"),
   ).replaceAll("<", "\\u003c"),
