@@ -20,15 +20,16 @@ private func localization(
 
 private func localizedKeys(for language: ResolvedAppLanguage) throws -> Set<String> {
     let resourceBundle = AppLocalization.defaultResourceBundle
-    guard let localizationPath = resourceBundle.path(
-        forResource: language.rawValue,
-        ofType: "lproj"
-    ) else {
+    guard let resourceURL = resourceBundle.resourceURL else {
         throw LocalizationTestError.missingLocalization(language.rawValue)
     }
 
-    let stringsURL = URL(fileURLWithPath: localizationPath)
+    let stringsURL = resourceURL
+        .appendingPathComponent("\(language.rawValue).lproj", isDirectory: true)
         .appendingPathComponent("Localizable.strings", isDirectory: false)
+    guard FileManager.default.fileExists(atPath: stringsURL.path) else {
+        throw LocalizationTestError.missingLocalization(language.rawValue)
+    }
     let data = try Data(contentsOf: stringsURL)
     var format = PropertyListSerialization.PropertyListFormat.openStep
     let propertyList = try PropertyListSerialization.propertyList(

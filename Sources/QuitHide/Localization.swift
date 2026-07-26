@@ -288,11 +288,22 @@ struct AppLocalization {
         for language: ResolvedAppLanguage,
         in resourceBundle: Bundle
     ) -> Bundle? {
-        guard let path = resourceBundle.path(
-            forResource: language.rawValue,
-            ofType: "lproj"
-        ) else { return nil }
-        return Bundle(path: path)
+        // Bundle.path(forResource:ofType:) may apply the host's preferred
+        // localization before resolving an .lproj directory. On an English
+        // system that can return en.lproj even when zh-Hans was requested.
+        // Build the locale directory URL explicitly so a manual language
+        // choice always wins over the host environment.
+        guard let resourceURL = resourceBundle.resourceURL else { return nil }
+        let languageURL = resourceURL.appendingPathComponent(
+            "\(language.rawValue).lproj",
+            isDirectory: true
+        )
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: languageURL.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else { return nil }
+        return Bundle(url: languageURL)
     }
 
     private static func replacingNamedTokens(
