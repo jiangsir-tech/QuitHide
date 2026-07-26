@@ -235,10 +235,6 @@ expect(
     "the rule picker follows the visible section order"
 )
 expect(
-    AutoAction.rulePickerOrder.map(\.rulePickerTitle) == ["不处理", "未设置", "自动隐藏", "自动退出"],
-    "the rule picker uses the visible section labels"
-)
-expect(
     AutomationPolicy.effectiveAction(explicitAction: .unset, defaultHideEnabled: false) == .unset,
     "disabling default hide preserves the old unset behavior"
 )

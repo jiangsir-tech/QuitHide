@@ -1,97 +1,66 @@
 # QuitHide
 
-[中文](README.md)
+[简体中文](README.md) · **English**
 
-QuitHide is a native macOS menu bar utility that automatically hides or gracefully quits apps after they have stayed in the background for a configurable amount of time.
+**Automatically hide or quit Mac apps you are not using.**
 
-![QuitHide menu bar interface](assets/quithide-screenshot.png)
+QuitHide is a free, open-source macOS menu bar utility. Give each app its own rule and delay: automatically hide it, request a normal quit, or leave it alone after it stays in the background.
 
-## Features
+For people looking for an alternative to [Quitter](https://marco.org/apps#quitter) or [QuitAll](https://amicoapps.com/app/quitall/), QuitHide offers a clear running-app view, persistent per-app rules, and quick manual actions.
 
-- Automatically hide apps without an explicit rule after the default delay
-- Choose Ignore, Hide, or Quit independently for each app
-- Set a separate delay for every automated rule
-- See the remaining time and next action for each app
-- Start a fresh countdown after an app becomes active again
-- Hide or quit all matching apps immediately
-- Pause automation at any time
-- Optionally launch at login
-- Check for updates automatically once per day by default, or manually in Settings
-- Keep Ignore, automatic Hide, and automatic Quit rules visible while apps are not running
-- Show ignored apps in the same horizontal rows as other rules; offline apps appear dimmed
+[**Download the latest release**](https://github.com/jiangsir-tech/QuitHide/releases/latest) · [View all releases](https://github.com/jiangsir-tech/QuitHide/releases)
 
-## Requirements
+macOS 13 Ventura or later · Apple Silicon and Intel Macs · English and Simplified Chinese interface
 
-- macOS 13 Ventura or later
-- Apple Silicon or Intel Mac (Universal 2)
+<img src="assets/quithide-menu-en.png" alt="QuitHide main interface in English" width="410">
 
-## Download and installation
+## What it does
 
-1. Download the latest `.dmg` from [GitHub Releases](https://github.com/jiangsir-tech/QuitHide/releases).
-2. Open the DMG and drag `QuitHide.app` into Applications.
-3. Launch QuitHide and use its menu bar icon to configure app rules.
+- Set Automatic Hide, Automatic Quit, or Ignore for each app, with an independent delay.
+- Use **Running** for current apps and **All Rules** to manage saved rules while apps are offline.
+- See countdowns and upcoming actions; run matching rules early or right-click one app for an immediate action.
+- Pause automation at any time, optionally launch at login, and receive stable-release update reminders.
+- Opt into two additional rules: auto-hide apps without a rule, and hide Automatic Quit apps before quitting them.
 
-Official release packages are signed with an Apple Developer ID and notarized by Apple. Only install builds downloaded from this repository's Releases page.
+| Rule | Behavior |
+| --- | --- |
+| **Ignore** | QuitHide never automatically hides or quits the app. |
+| **Unconfigured** | Left alone by default, or inherits optional automatic hiding. |
+| **Automatic Hide** | Hides the app after its delay while leaving it running. |
+| **Automatic Quit** | Sends the standard macOS quit request after its delay. |
 
-### What's new in 0.3.0
+## Quick start
 
-- Versioned migration, corruption recovery, and offline retention for independent app rules
-- New Running and All Rules views, default hiding, and optional pre-quit hiding
-- Explicit normal-quit timeout status with a separately confirmed manual force-quit action
-- Update checks now exclude prereleases and validate system compatibility and download URLs
-- Improved menu sizing and natural ordering across English names and Chinese Pinyin
+1. Download the DMG from [Releases](https://github.com/jiangsir-tech/QuitHide/releases/latest), drag `QuitHide.app` into **Applications**, and launch it.
+2. Click the QuitHide menu bar icon and find an app under **Running**.
+3. Choose a rule and delay. Use the footer buttons or an app's right-click menu for one-off actions.
 
-## How it works
+Both **Additional Rules** switches are off on a fresh installation, so apps without an explicit rule are not automated by default.
 
-On a fresh install, both switches under **Additional Rules** are off. Enable either one only when needed; each starts with a five-minute delay that you can change.
+## Safety and privacy
 
-The main menu opens in **Running**, showing every current app in this order: Ignore, Unconfigured, Automatic Hide, and Automatic Quit. **All Rules** keeps the Ignore, Automatic Hide, and Automatic Quit sections; each header shows both the total and running counts. Running apps come first within each section, followed by one natural order across English names and Chinese Pinyin. Offline apps appear dimmed.
+- Automatic Quit uses the standard macOS quit request and **never force-quits automatically**. Manual Force Quit is available only from an app's right-click menu and requires confirmation.
+- QuitHide manages standard macOS GUI apps. Menu bar-only apps, background processes, and command-line tools may not appear.
+- Rules and settings stay on this Mac. QuitHide contains no analytics service and does not upload the running-app list.
+- The current stable release is Developer ID signed and notarized by Apple.
 
-The menu window adapts to the number of currently running apps and visible groups. Once it reaches its height limit, the list scrolls instead. **All Rules** and search results keep that same height so switching or typing does not make the window jump.
+## Feedback
 
-Search combines matching apps into one result list instead of splitting them by rule type. Clearing the query restores the normal sections.
+[Report a bug or request a feature](https://github.com/jiangsir-tech/QuitHide/issues) · Author: [江sir爱数码](https://github.com/jiangsir-tech)
 
-Choose Ignore, Hide, or Quit beside an app to override the default. Ignore means QuitHide never handles that app; explicit Hide and Quit rules store their own delays. Explicit rules remain visible and editable while their apps are not running, with dimmed app identity.
+<details>
+<summary>Build from source</summary>
 
-The immediate Hide and Quit buttons run matching rules early without changing them. Manual actions remain available while automation is paused.
-
-Quit sends the standard macOS termination request rather than force-killing a process. Each target app remains responsible for warning about unsaved work.
-
-If an app is still running 30 seconds after a normal quit request, its status changes to **Quit Not Completed**. You can right-click it to request a normal quit again or choose **Force Quit…**, which always requires confirmation. Force Quit is manual only and is never used by automatic rules; unsaved work may be lost.
-
-**Automatically Check for Updates** is on by default. QuitHide waits briefly after launch and checks at most once every 24 hours. When it finds a new stable version compatible with the current macOS, it shows a reminder the next time you open the menu, where you can open the download page, be reminded again in 24 hours, or skip that version. You can disable automatic checks in Settings, and manual checks always remain available. QuitHide only opens this project's GitHub Releases page; it never downloads, installs, or restarts the app by itself.
-
-## Privacy
-
-QuitHide runs locally. It contains no analytics services or third-party dependencies, and it never uploads running-app information or saved rules. When automatic update checks are enabled, QuitHide performs at most one check every 24 hours: it first accesses this project's GitHub update manifest and may query GitHub Releases plus the candidate stable tag's compatibility manifest if the main manifest is unavailable. A release is not offered when compatibility cannot be confirmed. Manual checks use the same flow. These requests are used only to compare versions and contain no app list or saved rules.
-
-## Build from source
-
-The Apple Swift toolchain is required. Run the core regression tests first:
+Requires macOS and an Apple Swift 6 toolchain:
 
 ```sh
 ./scripts/test.sh
-```
-
-Then build the Universal 2 app with:
-
-```sh
 ./scripts/build-app.sh
 ```
 
-Maintainers can use the notarization credentials stored in Keychain to create a signed and notarized release:
+The local build is an ad-hoc-signed Universal 2 app. Formal releases additionally require Developer ID signing and Apple notarization.
 
-```sh
-./scripts/release-notarized.sh
-```
-
-Create the DMG and its SHA-256 checksum for GitHub Releases with:
-
-```sh
-./scripts/build-dmg.sh
-```
-
-Artifacts are written to `dist/`.
+</details>
 
 ## License
 

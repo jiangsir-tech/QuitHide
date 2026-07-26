@@ -1,0 +1,170 @@
+/* Language */
+"language.picker.label" = "Language";
+"language.system" = "System";
+"language.simplified_chinese" = "简体中文";
+"language.english" = "English";
+
+/* Actions and rules */
+"action.use_default" = "Use Default Rule";
+"action.hide" = "Hide";
+"action.quit" = "Quit";
+"action.ignore" = "Ignore";
+"rule.ignore" = "Ignore";
+"rule.unconfigured" = "Unconfigured";
+"rule.automatic_hide" = "Auto Hide";
+"rule.automatic_quit" = "Auto Quit";
+
+/* Warnings */
+"warning.rule_registry.newer_read_only" = "These rules were created by a newer version and cannot be read or displayed. Automation and rule-dependent batch actions are paused.";
+"warning.rule_registry.save_failed" = "Could not save the rules. Try again later.";
+"warning.login_item.failed" = "Could not update the login item. Try again later.";
+"warning.login_item.requires_approval" = "The login item needs approval. Allow QuitHide in System Settings > General > Login Items.";
+"warning.login_item.not_found" = "macOS could not find the QuitHide login item. Make sure QuitHide is in Applications and try again.";
+
+/* Main menu */
+"menu.subtitle" = "Automatically hide or quit unused apps";
+"menu.automation.enabled" = "Automation On";
+"menu.automation.paused" = "Automation Paused";
+"menu.automation.pause" = "Pause Automation";
+"menu.automation.resume" = "Resume Automation";
+"menu.settings" = "Settings";
+"menu.scope.running" = "Running";
+"menu.scope.all_rules" = "All Rules";
+"menu.scope.count" = "{title} {count}";
+"menu.search.shortcut" = "Search (⌘F)";
+"menu.search.focus" = "Focus Search";
+"menu.search.running_placeholder" = "Search Running Apps";
+"menu.search.rules_placeholder" = "Search Saved Rules";
+"menu.search.clear" = "Clear Search";
+"menu.section.ignore" = "Ignore";
+"menu.section.unconfigured" = "Unconfigured";
+"menu.section.automatic_hide" = "Automatic Hide";
+"menu.section.automatic_quit" = "Automatic Quit";
+"menu.section.search_results" = "Search Results";
+"menu.section.count" = "{section} ({count})";
+"menu.section.running_count" = "· {count} Running";
+"menu.update.available" = "Version {version} Is Available";
+"menu.update.download" = "Download";
+"menu.update.later" = "Remind Me Later";
+"menu.update.skip" = "Skip This Version";
+"menu.empty.search" = "No Matching Apps";
+"menu.empty.running" = "No Apps Are Currently Running";
+"menu.empty.rules" = "No Saved Rules Yet";
+"menu.view_all_rules" = "View All Rules";
+"menu.batch.heading" = "Run Now";
+"menu.batch.hide" = "Hide Now ({count})";
+"menu.batch.quit" = "Quit Now ({count})";
+"menu.row_action_hint" = "Right-click an app to hide or quit it immediately";
+"menu.quit_app" = "Quit QuitHide";
+
+/* App rows */
+"row.rule.label" = "Rule";
+"row.rule.help" = "Change the rule for {name}";
+"row.delay.inherited" = "Uses the default hide delay";
+"row.delay.not_set" = "No delay set";
+"row.delay.label" = "Delay";
+"row.delay.help" = "Time in the background before the action";
+"row.status.not_running" = "Not Running";
+"row.status.app_not_found" = "App Not Found";
+
+/* Context menu */
+"context.action.immediate" = "{action} Now";
+"context.hide.already_hidden" = "Hide Now (Already Hidden)";
+"context.hide.all_hidden" = "Hide Now (All Already Hidden)";
+"context.hide.visible_instances" = "Hide Now (Visible Instances: {count})";
+"context.quit.all_instances" = "Quit Now (All {count} Instances)";
+"context.force_quit" = "Force Quit…";
+"context.force_quit.all_instances" = "Force Quit All {count} Instances…";
+
+/* Automation status */
+"status.force_quit.in_progress" = "Force Quitting…";
+"status.force_quit.failed" = "Force Quit Failed";
+"status.force_quit.failed_help" = "The app is still running. Use macOS Force Quit or Activity Monitor.";
+"status.quit.in_progress" = "Quitting…";
+"status.quit.waiting_help" = "A normal quit request was sent. Waiting for the app to respond.";
+"status.quit.not_completed" = "Quit Not Completed";
+"status.quit.not_completed_help" = "The app may be waiting for a save or confirmation. Right-click to retry or force quit.";
+"status.hide.hidden" = "Hidden";
+"status.hide.in_progress" = "Hiding…";
+"status.quit.requested_waiting" = "Quit Requested · Waiting for App";
+"status.action.failed_retry" = "{action} Failed · Will Retry";
+"status.action.failed_manual" = "{action} Failed · Try Manually";
+"status.active" = "In Use · Waiting to Start";
+"status.waiting_for_background" = "Waiting for Background";
+"status.action.about_to_run" = "About to {action}";
+"status.hide.hidden_remaining" = "Hidden · {time} Remaining";
+"status.automation.paused_remaining" = "Paused · {time} Remaining";
+"status.hide.failed_will_quit" = "Hide Failed · Will Still Quit";
+"status.action.remaining" = "{action} in {time}";
+"status.instances.error_summary" = "Running instances: {count} · {status}: {errorCount}";
+"status.instances.quit_not_completed" = "Running instances: {count} · Quit not completed: {warningCount}";
+"status.instances.quit_not_completed_help" = "The remaining instances may be waiting for a save or confirmation. Right-click to retry or force quit.";
+"status.instances.same_status" = "Running instances: {count} · {status}";
+"status.instances.separate_timers" = "Running instances: {count} · Separate timers";
+"status.instances.paused_separate_timers" = "Paused · Running instances: {count} · Separate timers";
+
+/* Dynamic help */
+"help.rule_registry.batch_unavailable" = "These rules were created by a newer version and cannot be read. Rule-dependent batch actions are unavailable.";
+"help.immediate.no_targets" = "No apps match the {action} action";
+"help.immediate.targets" = "{action} now: {names}";
+
+/* Settings */
+"settings.title" = "QuitHide Settings";
+"settings.login.open" = "Open Login Item Settings";
+"settings.login.launch" = "Launch at Login";
+"settings.additional_rules.title" = "Additional Rules";
+"settings.default_hide.enabled" = "Auto-Hide Apps without a Rule";
+"settings.default_hide.delay" = "Default Hide Delay";
+"settings.default_hide.help" = "How long an app without a rule stays in the background before being hidden";
+"settings.pre_quit_hide.enabled" = "Hide Apps before Automatic Quit";
+"settings.pre_quit_hide.delay" = "Pre-Quit Hide Delay";
+"settings.pre_quit_hide.help" = "How long an Automatic Quit app stays in the background before being hidden";
+"settings.about.title" = "About QuitHide";
+"settings.about.author" = "Author: 江sir爱数码";
+"settings.about.feedback" = "Feedback via WeChat: jsasm1";
+"settings.about.version" = "Version {version}";
+"settings.about.notarized" = "Official releases are Developer ID signed and notarized by Apple";
+"settings.update.automatic" = "Automatic Update Checks";
+"settings.github_project" = "GitHub Project";
+
+/* Updates */
+"update.action.download" = "Download";
+"update.action.check" = "Check for Updates";
+"update.status.checking" = "Checking…";
+"update.status.up_to_date" = "QuitHide Is Up to Date";
+"update.status.available" = "Version {version} Is Available";
+"update.status.failed" = "Check Failed. Try Again Later.";
+"update.prompt.available" = "Version {version} Is Available";
+"update.prompt.later" = "Remind Me Later";
+"update.prompt.skip" = "Skip This Version";
+
+/* Force-quit confirmation */
+"dialog.force_quit.title" = "Force Quit “{name}”?";
+"dialog.force_quit.message" = "This immediately terminates the selected instances that are still running without waiting for the app to save or confirm. Unsaved changes may be lost.";
+"dialog.force_quit.confirm" = "Force Quit";
+"dialog.cancel" = "Cancel";
+
+/* Errors */
+"error.update.invalid_response" = "The update server returned an invalid response";
+"error.update.no_release" = "No available release was found";
+
+/* Accessibility */
+"a11y.settings" = "Settings";
+"a11y.automation.pause" = "Pause Automation";
+"a11y.automation.resume" = "Resume Automation";
+"a11y.search.focus" = "Focus Search Field";
+"a11y.search.clear" = "Clear Search";
+"a11y.scope.app_count" = "{title}, apps: {count}";
+"a11y.rule.for_app" = "Rule for {name}";
+"a11y.delay.for_app" = "Delay for {name}";
+"a11y.delay.not_set" = "No delay set";
+"a11y.action.for_app" = "{action}, {name}";
+
+/* Durations */
+"duration.minute" = "1 min";
+"duration.minutes" = "{count} min";
+"duration.hour" = "1 hr";
+"duration.hours" = "{count} hr";
+"duration.day" = "1 day";
+"duration.days" = "{count} days";
+"duration.hours_minutes" = "{hours} hr {minutes} min";

@@ -1,0 +1,170 @@
+/* Language */
+"language.picker.label" = "语言";
+"language.system" = "跟随系统";
+"language.simplified_chinese" = "简体中文";
+"language.english" = "English";
+
+/* Actions and rules */
+"action.use_default" = "按默认规则";
+"action.hide" = "隐藏";
+"action.quit" = "退出";
+"action.ignore" = "不处理";
+"rule.ignore" = "不处理";
+"rule.unconfigured" = "未设置";
+"rule.automatic_hide" = "自动隐藏";
+"rule.automatic_quit" = "自动退出";
+
+/* Warnings */
+"warning.rule_registry.newer_read_only" = "规则来自更高版本，当前版本无法解析或显示；自动处理及依赖规则的批量操作已暂停";
+"warning.rule_registry.save_failed" = "保存规则失败，请稍后重试";
+"warning.login_item.failed" = "登录项设置失败，请稍后重试";
+"warning.login_item.requires_approval" = "登录项等待系统批准。请在“系统设置 > 通用 > 登录项”中允许 QuitHide。";
+"warning.login_item.not_found" = "系统未找到 QuitHide 登录项。请确认 QuitHide 位于“应用程序”文件夹后重试。";
+
+/* Main menu */
+"menu.subtitle" = "自动隐藏或退出不需要的 App";
+"menu.automation.enabled" = "自动处理已开启";
+"menu.automation.paused" = "自动处理已暂停";
+"menu.automation.pause" = "暂停自动处理";
+"menu.automation.resume" = "继续自动处理";
+"menu.settings" = "设置";
+"menu.scope.running" = "运行中";
+"menu.scope.all_rules" = "全部规则";
+"menu.scope.count" = "{title} {count}";
+"menu.search.shortcut" = "搜索（⌘F）";
+"menu.search.focus" = "聚焦搜索";
+"menu.search.running_placeholder" = "搜索运行中的 App";
+"menu.search.rules_placeholder" = "搜索已保存规则";
+"menu.search.clear" = "清除搜索";
+"menu.section.ignore" = "不处理";
+"menu.section.unconfigured" = "未设置";
+"menu.section.automatic_hide" = "自动隐藏";
+"menu.section.automatic_quit" = "自动退出";
+"menu.section.search_results" = "搜索结果";
+"menu.section.count" = "{section} ({count})";
+"menu.section.running_count" = "· 运行中 {count}";
+"menu.update.available" = "发现新版本 {version}";
+"menu.update.download" = "前往下载";
+"menu.update.later" = "稍后提醒";
+"menu.update.skip" = "跳过此版本";
+"menu.empty.search" = "没有匹配的 App";
+"menu.empty.running" = "当前没有正在运行的 App";
+"menu.empty.rules" = "还没有已保存规则";
+"menu.view_all_rules" = "查看全部规则";
+"menu.batch.heading" = "提前执行";
+"menu.batch.hide" = "立即隐藏（{count}）";
+"menu.batch.quit" = "立即退出（{count}）";
+"menu.row_action_hint" = "单个 App 上右击也可以立即隐藏或退出";
+"menu.quit_app" = "退出 QuitHide";
+
+/* App rows */
+"row.rule.label" = "规则";
+"row.rule.help" = "修改 {name} 的规则";
+"row.delay.inherited" = "继承默认隐藏时间";
+"row.delay.not_set" = "未设置等待时间";
+"row.delay.label" = "等待时间";
+"row.delay.help" = "离开前台多久后处理";
+"row.status.not_running" = "未运行";
+"row.status.app_not_found" = "未找到 App";
+
+/* Context menu */
+"context.action.immediate" = "立即{action}";
+"context.hide.already_hidden" = "立即隐藏（已隐藏）";
+"context.hide.all_hidden" = "立即隐藏（已全部隐藏）";
+"context.hide.visible_instances" = "立即隐藏（{count} 个可见实例）";
+"context.quit.all_instances" = "立即退出（全部 {count} 个实例）";
+"context.force_quit" = "强制退出…";
+"context.force_quit.all_instances" = "强制退出全部 {count} 个实例…";
+
+/* Automation status */
+"status.force_quit.in_progress" = "正在强制退出…";
+"status.force_quit.failed" = "强制退出失败";
+"status.force_quit.failed_help" = "App 仍在运行，请使用 macOS 的“强制退出”窗口或活动监视器处理";
+"status.quit.in_progress" = "正在退出…";
+"status.quit.waiting_help" = "正常退出请求已发送，正在等待 App 响应";
+"status.quit.not_completed" = "退出未完成";
+"status.quit.not_completed_help" = "App 仍在运行，可能正在等待保存或确认；右击可重试或强制退出";
+"status.hide.hidden" = "已隐藏";
+"status.hide.in_progress" = "正在隐藏…";
+"status.quit.requested_waiting" = "已请求退出 · 等待 App 响应";
+"status.action.failed_retry" = "{action}失败 · 稍后重试";
+"status.action.failed_manual" = "{action}失败 · 请手动重试";
+"status.active" = "使用中 · 离开后计时";
+"status.waiting_for_background" = "等待离开前台";
+"status.action.about_to_run" = "即将{action}";
+"status.hide.hidden_remaining" = "已隐藏 · 还剩 {time}";
+"status.automation.paused_remaining" = "已暂停 · 剩余 {time}";
+"status.hide.failed_will_quit" = "隐藏失败 · 仍将退出";
+"status.action.remaining" = "还剩 {time} · 将{action}";
+"status.instances.error_summary" = "{count} 个运行实例 · {errorCount} 个{status}";
+"status.instances.quit_not_completed" = "{count} 个运行实例 · {warningCount} 个退出未完成";
+"status.instances.quit_not_completed_help" = "仍在运行的实例可能正在等待保存或确认；右击可重试或强制退出";
+"status.instances.same_status" = "{count} 个运行实例 · {status}";
+"status.instances.separate_timers" = "{count} 个运行实例 · 分别计时";
+"status.instances.paused_separate_timers" = "已暂停 · {count} 个运行实例 · 分别计时";
+
+/* Dynamic help */
+"help.rule_registry.batch_unavailable" = "规则来自更高版本，当前版本无法解析，不能执行依赖规则的批量操作";
+"help.immediate.no_targets" = "没有可立即{action}的 App";
+"help.immediate.targets" = "立即{action}：{names}";
+
+/* Settings */
+"settings.title" = "QuitHide 设置";
+"settings.login.open" = "打开登录项设置";
+"settings.login.launch" = "登录时启动";
+"settings.additional_rules.title" = "附加规则";
+"settings.default_hide.enabled" = "未设置规则的 App 自动隐藏";
+"settings.default_hide.delay" = "默认隐藏时间";
+"settings.default_hide.help" = "未单独设置规则的 App 离开前台多久后隐藏";
+"settings.pre_quit_hide.enabled" = "自动退出的 App 退出前先自动隐藏";
+"settings.pre_quit_hide.delay" = "预先隐藏时间";
+"settings.pre_quit_hide.help" = "自动退出的 App 离开前台多久后先隐藏";
+"settings.about.title" = "关于 QuitHide";
+"settings.about.author" = "作者：江sir爱数码";
+"settings.about.feedback" = "有问题可以加江sir微信进行反馈：jsasm1";
+"settings.about.version" = "版本 {version}";
+"settings.about.notarized" = "正式发布包使用 Developer ID 签名并通过 Apple 公证";
+"settings.update.automatic" = "自动检查更新";
+"settings.github_project" = "GitHub 项目";
+
+/* Updates */
+"update.action.download" = "前往下载";
+"update.action.check" = "检查更新";
+"update.status.checking" = "正在检查…";
+"update.status.up_to_date" = "当前已是最新版本";
+"update.status.available" = "发现新版本 {version}";
+"update.status.failed" = "检查失败，请稍后重试";
+"update.prompt.available" = "发现新版本 {version}";
+"update.prompt.later" = "稍后提醒";
+"update.prompt.skip" = "跳过此版本";
+
+/* Force-quit confirmation */
+"dialog.force_quit.title" = "强制退出“{name}”？";
+"dialog.force_quit.message" = "将立即结束本次选择中仍在运行的实例，且不会等待 App 保存或确认；未保存的内容可能会丢失。";
+"dialog.force_quit.confirm" = "强制退出";
+"dialog.cancel" = "取消";
+
+/* Errors */
+"error.update.invalid_response" = "更新服务器返回了无效响应";
+"error.update.no_release" = "暂未找到可用版本";
+
+/* Accessibility */
+"a11y.settings" = "设置";
+"a11y.automation.pause" = "暂停自动处理";
+"a11y.automation.resume" = "继续自动处理";
+"a11y.search.focus" = "聚焦搜索";
+"a11y.search.clear" = "清除搜索";
+"a11y.scope.app_count" = "{title}，{count} 个 App";
+"a11y.rule.for_app" = "{name} 的规则";
+"a11y.delay.for_app" = "{name} 的等待时间";
+"a11y.delay.not_set" = "未设置等待时间";
+"a11y.action.for_app" = "{action}，{name}";
+
+/* Durations */
+"duration.minute" = "1 分钟";
+"duration.minutes" = "{count} 分钟";
+"duration.hour" = "1 小时";
+"duration.hours" = "{count} 小时";
+"duration.day" = "1 天";
+"duration.days" = "{count} 天";
+"duration.hours_minutes" = "{hours}时{minutes}分";
