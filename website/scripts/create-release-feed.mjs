@@ -21,6 +21,9 @@ if (releaseAPI.tag_name !== tagName) {
 if (releaseAPI.draft || releaseAPI.prerelease) {
   throw new Error("The website feed accepts stable published releases only");
 }
+if (!releaseAPI.published_at || Number.isNaN(Date.parse(releaseAPI.published_at))) {
+  throw new Error("The stable release requires a valid publication date");
+}
 const englishReleaseNotes = manifest.releaseNotesEn?.trim()
   || (fallbackFeed?.version === version ? fallbackFeed.releaseNotes?.en?.trim() : null);
 if (!manifest.releaseNotes?.trim() || !englishReleaseNotes) {

@@ -9,6 +9,7 @@ const release = JSON.parse(await readFile(path.join(outputDirectory, "release.js
 const chinese = await readFile(path.join(outputDirectory, "index.html"), "utf8");
 const english = await readFile(path.join(outputDirectory, "en/index.html"), "utf8");
 const styles = await readFile(path.join(outputDirectory, "styles.css"), "utf8");
+const edgeOne = JSON.parse(await readFile(path.resolve(outputDirectory, "../edgeone.json"), "utf8"));
 const chineseText = chinese.replace(/<[^>]+>/g, "");
 
 for (const [label, content] of [["Chinese page", chinese], ["English page", english]]) {
@@ -58,6 +59,18 @@ for (const [foreground, background] of [
   if (ratio < 4.5) {
     throw new Error(`${foreground} on ${background} has insufficient contrast: ${ratio.toFixed(2)}:1`);
   }
+}
+
+const appcastHeaders = edgeOne.headers?.find((rule) => rule.source === "/appcast.xml")?.headers;
+if (!appcastHeaders?.some(({ key, value }) => (
+  key.toLowerCase() === "cache-control" && value.includes("must-revalidate")
+))) {
+  throw new Error("Sparkle appcast needs a short revalidating EdgeOne cache policy");
+}
+if (!appcastHeaders?.some(({ key, value }) => (
+  key.toLowerCase() === "content-type" && value.startsWith("application/xml")
+))) {
+  throw new Error("Sparkle appcast needs an XML content type");
 }
 
 console.log(`PASS: bilingual product site metadata for v${release.version}`);

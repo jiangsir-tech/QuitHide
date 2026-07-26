@@ -1,12 +1,11 @@
 name: Publish Product Site Data
+run-name: Publish QuitHide ${{ inputs.tag }}
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Stable release tag to publish, for example v0.4.0
+        description: Draft release tag to verify and publish, for example v0.5.0
         required: true
         type: string
 
@@ -19,14 +18,15 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
       QUITHIDE_DOWNLOAD_BASE_URL: ${{ vars.QUITHIDE_DOWNLOAD_BASE_URL }}
+      QUITHIDE_COS_ENABLED: ${{ vars.QUITHIDE_COS_ENABLED }}
       TENCENT_COS_BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
       TENCENT_COS_REGION: ap-hongkong
       EDGEONE_DEPLOY_HOOK_URL: ${{ secrets.EDGEONE_DEPLOY_HOOK_URL }}
+      QUITHIDE_SPARKLE_PUBLIC_KEY: EgvKsfkplqDgsQP0N6OLSNUzVIf4Laq97jLo6pVEHjo=
     steps:
       - name: Check out the product repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -34,108 +34,372 @@ jobs:
           fetch-depth: 0
           ref: main
 
-      - name: Resolve and download the stable release
+      - name: Resolve and download the draft assets
         id: release
         shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          tag="$RELEASE_TAG"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid stable tag: $tag" >&2
             exit 1
           fi
-          mkdir -p "$RUNNER_TEMP/quithide-release"
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$tag" > "$RUNNER_TEMP/release-api.json"
-          gh release download "$tag" \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern 'QuitHide-*-universal.dmg' \
-            --pattern 'QuitHide-*-universal.dmg.sha256' \
-            --dir "$RUNNER_TEMP/quithide-release"
-          git show "$tag:update.json" > "$RUNNER_TEMP/update.json"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [[ "$QUITHIDE_COS_ENABLED" != "true" ]]; then
+            echo "Hong Kong COS must be enabled before publishing a Sparkle update." >&2
+            exit 1
+          fi
+          : "${QUITHIDE_DOWNLOAD_BASE_URL:?Set QUITHIDE_DOWNLOAD_BASE_URL}"
+          : "${TENCENT_COS_BUCKET:?Set TENCENT_COS_BUCKET}"
 
-      - name: Verify assets and generate the website release feed
+          release_dir="$RUNNER_TEMP/quithide-release"
+          mkdir -p "$release_dir"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$tag" > "$RUNNER_TEMP/release-api.json"
+          if [[ "$(jq -r '.prerelease' "$RUNNER_TEMP/release-api.json")" != "false" ]]; then
+            echo "Prereleases cannot enter the stable feed." >&2
+            exit 1
+          fi
+          release_commit="$(jq -r '.target_commitish' "$RUNNER_TEMP/release-api.json")"
+          if [[ ! "$release_commit" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "Draft release must target the exact 40-character source commit." >&2
+            exit 1
+          fi
+          git fetch --no-tags origin "$release_commit"
+          git cat-file -e "$release_commit^{commit}"
+          if ! git merge-base --is-ancestor HEAD "$release_commit" &&
+             ! git merge-base --is-ancestor "$release_commit" HEAD; then
+            echo "Release commit and main have diverged; rebase and rebuild the draft." >&2
+            exit 1
+          fi
+          git show "$release_commit:update.json" > "$RUNNER_TEMP/update.json"
+          git show "$release_commit:Resources/Info.plist" > "$RUNNER_TEMP/Info.plist"
+
+          version="$(jq -r '.version' "$RUNNER_TEMP/update.json")"
+          if [[ "$tag" != "v$version" ]]; then
+            echo "Release tag and update manifest version do not match." >&2
+            exit 1
+          fi
+          release_is_draft="$(jq -r '.draft' "$RUNNER_TEMP/release-api.json")"
+          if [[ "$release_is_draft" == "true" ]]; then
+            release_state="draft"
+          else
+            release_state="published"
+          fi
+          progression="$(node website/scripts/verify-release-progression.mjs \
+            --manifest "$RUNNER_TEMP/update.json" \
+            --public-feed website/release.json \
+            --release-state "$release_state")"
+          progression_mode="$(jq -r '.mode' <<<"$progression")"
+          public_key="$(python3 - "$RUNNER_TEMP/Info.plist" "$RUNNER_TEMP/update.json" <<'PY'
+          import json
+          import plistlib
+          import sys
+          with open(sys.argv[1], "rb") as stream:
+              plist = plistlib.load(stream)
+          with open(sys.argv[2], "r", encoding="utf-8") as stream:
+              manifest = json.load(stream)
+          expected = {
+              "CFBundleShortVersionString": manifest["version"],
+              "CFBundleVersion": str(manifest["build"]),
+              "LSMinimumSystemVersion": manifest["minimumSystemVersion"],
+              "SUFeedURL": "https://quithide.com/appcast.xml",
+              "SURequireSignedFeed": True,
+              "SUVerifyUpdateBeforeExtraction": True,
+          }
+          for key, value in expected.items():
+              if plist.get(key) != value:
+                  raise SystemExit(f"Info.plist {key} does not match the release manifest")
+          value = plist.get("SUPublicEDKey")
+          if not isinstance(value, str) or not value:
+              raise SystemExit("Missing SUPublicEDKey")
+          print(value)
+          PY
+          )"
+          if [[ "$public_key" != "$QUITHIDE_SPARKLE_PUBLIC_KEY" ]]; then
+            echo "Release commit attempts to use an unapproved Sparkle public key." >&2
+            exit 1
+          fi
+
+          dmg_name="QuitHide-$tag-universal.dmg"
+          checksum_name="$dmg_name.sha256"
+          appcast_name="QuitHide-$tag-appcast.xml"
+          if [[ "$(jq '.assets | length' "$RUNNER_TEMP/release-api.json")" -ne 3 ]]; then
+            echo "Draft release must contain exactly DMG, SHA-256, and signed appcast assets." >&2
+            exit 1
+          fi
+          for name in "$dmg_name" "$checksum_name" "$appcast_name"; do
+            asset_id="$(jq -r --arg name "$name" '[.assets[] | select(.name == $name)] | if length == 1 then .[0].id else empty end' "$RUNNER_TEMP/release-api.json")"
+            if [[ -z "$asset_id" ]]; then
+              echo "Missing or duplicate release asset: $name" >&2
+              exit 1
+            fi
+            gh api --header "Accept: application/octet-stream" "repos/${GITHUB_REPOSITORY}/releases/assets/$asset_id" > "$release_dir/$name"
+          done
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_commit=$release_commit" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=$dmg_name" >> "$GITHUB_OUTPUT"
+          echo "checksum_name=$checksum_name" >> "$GITHUB_OUTPUT"
+          echo "appcast_name=$appcast_name" >> "$GITHUB_OUTPUT"
+          echo "release_state=$release_state" >> "$GITHUB_OUTPUT"
+          echo "progression_mode=$progression_mode" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the signed draft
         shell: bash
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          dmg_files=("$RUNNER_TEMP"/quithide-release/*.dmg)
-          checksum_files=("$RUNNER_TEMP"/quithide-release/*.dmg.sha256)
-          if [[ ${#dmg_files[@]} -ne 1 || ${#checksum_files[@]} -ne 1 ]]; then
-            echo "Expected exactly one DMG and one checksum file" >&2
-            exit 1
+          node website/scripts/verify-sparkle-release.mjs --manifest "$RUNNER_TEMP/update.json" --dmg "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}" --checksum "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}" --appcast "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" --download-base-url "$QUITHIDE_DOWNLOAD_BASE_URL" --public-key "$QUITHIDE_SPARKLE_PUBLIC_KEY" --release "$RUNNER_TEMP/release-api.json" --release-state either
+          if [[ "${{ steps.release.outputs.progression_mode }}" == "retry" ]]; then
+            if [[ ! -f website/src/appcast.xml ]] ||
+               ! cmp -s "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" website/src/appcast.xml; then
+              echo "An equal-build retry must reuse the exact public signed appcast." >&2
+              exit 1
+            fi
+            current_sha="$(jq -r '.file.sha256' website/release.json)"
+            release_sha="$(sha256sum "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}" | awk '{print $1}')"
+            if [[ "$release_sha" != "$current_sha" ]]; then
+              echo "An equal-build retry must reuse the exact public DMG." >&2
+              exit 1
+            fi
           fi
-          node website/scripts/create-release-feed.mjs \
-            --release "$RUNNER_TEMP/release-api.json" \
-            --manifest "$RUNNER_TEMP/update.json" \
-            --dmg "${dmg_files[0]}" \
-            --checksum "${checksum_files[0]}" \
-            --fallback-feed website/release.json \
-            --output "$RUNNER_TEMP/release.json"
-          cp "$RUNNER_TEMP/release.json" website/release.json
-          npm --prefix website test
 
       - name: Upload immutable release files to Hong Kong COS
-        if: vars.QUITHIDE_COS_ENABLED == 'true'
         shell: bash
         env:
           TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
           TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         run: |
           set -euo pipefail
-          : "${QUITHIDE_DOWNLOAD_BASE_URL:?Set QUITHIDE_DOWNLOAD_BASE_URL}"
-          : "${TENCENT_COS_BUCKET:?Set TENCENT_COS_BUCKET}"
           : "${TENCENT_SECRET_ID:?Set TENCENT_SECRET_ID}"
           : "${TENCENT_SECRET_KEY:?Set TENCENT_SECRET_KEY}"
-          curl --fail --location --silent --show-error \
-            https://github.com/tencentyun/coscli/releases/download/v1.0.8/coscli-v1.0.8-linux-amd64 \
-            --output "$RUNNER_TEMP/coscli"
+          curl --fail --location --silent --show-error https://github.com/tencentyun/coscli/releases/download/v1.0.8/coscli-v1.0.8-linux-amd64 --output "$RUNNER_TEMP/coscli"
           echo "7165f2ae16c5f7ac495864c963ca574a76e04ec72680d7bc8a8eee3234d8cf91  $RUNNER_TEMP/coscli" | sha256sum --check --strict
           chmod +x "$RUNNER_TEMP/coscli"
-          "$RUNNER_TEMP/coscli" config set \
-            --secret_id "$TENCENT_SECRET_ID" \
-            --secret_key "$TENCENT_SECRET_KEY"
-          "$RUNNER_TEMP/coscli" config add \
-            --bucket "$TENCENT_COS_BUCKET" \
-            --region "$TENCENT_COS_REGION" \
-            --endpoint "cos.${TENCENT_COS_REGION}.myqcloud.com" \
-            --alias quithide
+          "$RUNNER_TEMP/coscli" config set --secret_id "$TENCENT_SECRET_ID" --secret_key "$TENCENT_SECRET_KEY"
+          "$RUNNER_TEMP/coscli" config add --bucket "$TENCENT_COS_BUCKET" --region "$TENCENT_COS_REGION" --endpoint "cos.${TENCENT_COS_REGION}.myqcloud.com" --alias quithide
+
+          upload_immutable() {
+            local source="$1"
+            local destination="$2"
+            local public_url="$3"
+            local metadata="$4"
+            local existing="$RUNNER_TEMP/existing-${source##*/}"
+            local status
+            status="$(curl --location --silent --show-error --output "$existing" --write-out '%{http_code}' "$public_url?integrity-check=${GITHUB_RUN_ID}")"
+            case "$status" in
+              200)
+                if [[ "$(sha256sum "$existing" | awk '{print $1}')" != "$(sha256sum "$source" | awk '{print $1}')" ]]; then
+                  echo "Refusing to overwrite a different immutable COS object: $public_url" >&2
+                  exit 1
+                fi
+                echo "Verified existing immutable COS object: $public_url"
+                ;;
+              404)
+                "$RUNNER_TEMP/coscli" cp "$source" "$destination" --meta "$metadata"
+                ;;
+              *)
+                echo "Could not safely determine whether COS object exists ($status): $public_url" >&2
+                exit 1
+                ;;
+            esac
+          }
+
           tag="${{ steps.release.outputs.tag }}"
-          dmg=("$RUNNER_TEMP"/quithide-release/*.dmg)
-          checksum=("$RUNNER_TEMP"/quithide-release/*.dmg.sha256)
-          "$RUNNER_TEMP/coscli" cp "${dmg[0]}" "cos://quithide/releases/$tag/${dmg[0]##*/}" \
-            --meta "Cache-Control:public, max-age=31536000, immutable#Content-Disposition:attachment"
-          "$RUNNER_TEMP/coscli" cp "${checksum[0]}" "cos://quithide/releases/$tag/${checksum[0]##*/}" \
-            --meta "Cache-Control:public, max-age=31536000, immutable"
-          "$RUNNER_TEMP/coscli" cp "$RUNNER_TEMP/release.json" cos://quithide/latest.json \
-            --meta "Cache-Control:public, max-age=300, must-revalidate#Content-Type:application/json"
+          dmg="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}"
+          checksum="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}"
+          dmg_url="$QUITHIDE_DOWNLOAD_BASE_URL/releases/$tag/${dmg##*/}"
+          checksum_url="$QUITHIDE_DOWNLOAD_BASE_URL/releases/$tag/${checksum##*/}"
+          upload_immutable "$dmg" "cos://quithide/releases/$tag/${dmg##*/}" "$dmg_url" "Cache-Control:public, max-age=31536000, immutable#Content-Disposition:attachment"
+          upload_immutable "$checksum" "cos://quithide/releases/$tag/${checksum##*/}" "$checksum_url" "Cache-Control:public, max-age=31536000, immutable"
 
       - name: Verify the public COS download
-        if: vars.QUITHIDE_COS_ENABLED == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          direct_url=$(jq -r '.file.directDownloadURL' "$RUNNER_TEMP/release.json")
-          expected_sha=$(jq -r '.file.sha256' "$RUNNER_TEMP/release.json")
-          curl --fail --location --retry 5 --retry-delay 4 \
-            "$direct_url" --output "$RUNNER_TEMP/public-release.dmg"
+          tag="${{ steps.release.outputs.tag }}"
+          dmg_name="${{ steps.release.outputs.dmg_name }}"
+          checksum="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}"
+          expected_sha="$(awk '{print $1}' "$checksum")"
+          direct_url="$QUITHIDE_DOWNLOAD_BASE_URL/releases/$tag/$dmg_name"
+          curl --fail --location --retry 5 --retry-delay 4 "$direct_url?public-verification=${GITHUB_RUN_ID}" --output "$RUNNER_TEMP/public-release.dmg"
           echo "$expected_sha  $RUNNER_TEMP/public-release.dmg" | sha256sum --check --strict
 
-      - name: Commit the verified release feed
+      - name: Promote the verified source while preserving public feeds
+        id: source
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- website/release.json; then
-            echo "The website already contains this release feed."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add website/release.json
-          git commit -m "同步产品网站至 QuitHide ${{ steps.release.outputs.tag }}"
-          git push origin HEAD:main
 
-      - name: Trigger EdgeOne deployment
+          release_commit="${{ steps.release.outputs.release_commit }}"
+          git fetch origin main
+          git merge --ff-only origin/main
+          git show origin/main:website/release.json > "$RUNNER_TEMP/latest-public-release.json"
+          progression="$(node website/scripts/verify-release-progression.mjs \
+            --manifest "$RUNNER_TEMP/update.json" \
+            --public-feed "$RUNNER_TEMP/latest-public-release.json" \
+            --release-state "${{ steps.release.outputs.release_state }}")"
+
+          if [[ "$(jq -r '.mode' <<<"$progression")" == "retry" ]]; then
+            git show origin/main:website/src/appcast.xml > "$RUNNER_TEMP/latest-public-appcast.xml"
+            if ! cmp -s \
+              "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" \
+              "$RUNNER_TEMP/latest-public-appcast.xml"; then
+              echo "An equal-version retry must reuse the exact public signed appcast." >&2
+              exit 1
+            fi
+            current_sha="$(jq -r '.file.sha256' "$RUNNER_TEMP/latest-public-release.json")"
+            release_sha="$(sha256sum "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}" | awk '{print $1}')"
+            if [[ "$release_sha" != "$current_sha" ]]; then
+              echo "An equal-version retry must reuse the exact public DMG." >&2
+              exit 1
+            fi
+          fi
+
+          if git merge-base --is-ancestor HEAD "$release_commit"; then
+            git merge --ff-only "$release_commit"
+          elif ! git merge-base --is-ancestor "$release_commit" HEAD; then
+            echo "Main and the verified release commit have diverged; refusing to publish." >&2
+            exit 1
+          fi
+
+          # The release source contains its next-version update.json because it
+          # was used to build the signed artifacts. Keep every public feed at
+          # the previous release until the GitHub Release is public.
+          git restore --source=origin/main -- update.json website/release.json
+          if git cat-file -e origin/main:website/src/appcast.xml 2>/dev/null; then
+            git restore --source=origin/main -- website/src/appcast.xml
+          else
+            rm -f website/src/appcast.xml
+          fi
+          git add -A -- update.json website/release.json website/src
+          if ! git diff --cached --quiet; then
+            git commit -m "准备 QuitHide ${{ steps.release.outputs.tag }} 发布源码"
+          fi
+          git push origin HEAD:main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the verified GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.release.outputs.tag }}"
+
+          if [[ "$(jq -r '.draft' "$RUNNER_TEMP/release-api.json")" == "true" ]]; then
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$tag" > "$RUNNER_TEMP/published-release-api.json"
+          if [[ "$(jq -r '.draft' "$RUNNER_TEMP/published-release-api.json")" != "false" || "$(jq -r '.prerelease' "$RUNNER_TEMP/published-release-api.json")" != "false" || "$(jq -r '.published_at // empty' "$RUNNER_TEMP/published-release-api.json")" == "" ]]; then
+            echo "GitHub release was not published as a stable release." >&2
+            exit 1
+          fi
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          if [[ "$(git rev-parse "$tag^{commit}")" != "${{ steps.release.outputs.release_commit }}" ]]; then
+            echo "Published tag does not point to the built release commit." >&2
+            exit 1
+          fi
+
+      - name: Generate and test final public metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}"
+          checksum="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}"
+          appcast="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}"
+          node website/scripts/verify-sparkle-release.mjs --manifest "$RUNNER_TEMP/update.json" --dmg "$dmg" --checksum "$checksum" --appcast "$appcast" --download-base-url "$QUITHIDE_DOWNLOAD_BASE_URL" --public-key "$QUITHIDE_SPARKLE_PUBLIC_KEY" --release "$RUNNER_TEMP/published-release-api.json" --release-state published
+          node website/scripts/create-release-feed.mjs --release "$RUNNER_TEMP/published-release-api.json" --manifest "$RUNNER_TEMP/update.json" --dmg "$dmg" --checksum "$checksum" --fallback-feed website/release.json --output "$RUNNER_TEMP/release.json"
+
+          cp "$RUNNER_TEMP/update.json" update.json
+          cp "$RUNNER_TEMP/release.json" website/release.json
+          cp "$appcast" website/src/appcast.xml
+          npm --prefix website test
+
+      - name: Commit the verified feeds last
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git restore --source=HEAD --worktree -- update.json website/release.json
+          if git cat-file -e HEAD:website/src/appcast.xml 2>/dev/null; then
+            git restore --source=HEAD --worktree -- website/src/appcast.xml
+          else
+            rm -f website/src/appcast.xml
+          fi
+          git fetch origin main
+          git merge --ff-only origin/main
+          git show HEAD:website/release.json > "$RUNNER_TEMP/final-public-release.json"
+          final_progression="$(node website/scripts/verify-release-progression.mjs \
+            --manifest "$RUNNER_TEMP/update.json" \
+            --public-feed "$RUNNER_TEMP/final-public-release.json" \
+            --release-state published)"
+          if [[ "$(jq -r '.mode' <<<"$final_progression")" == "retry" ]]; then
+            git show HEAD:website/src/appcast.xml > "$RUNNER_TEMP/final-public-appcast.xml"
+            if ! cmp -s \
+              "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" \
+              "$RUNNER_TEMP/final-public-appcast.xml"; then
+              echo "An equal-version retry must reuse the exact final public appcast." >&2
+              exit 1
+            fi
+            current_sha="$(jq -r '.file.sha256' "$RUNNER_TEMP/final-public-release.json")"
+            release_sha="$(sha256sum "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}" | awk '{print $1}')"
+            if [[ "$release_sha" != "$current_sha" ]]; then
+              echo "An equal-version retry must reuse the exact final public DMG." >&2
+              exit 1
+            fi
+          fi
+          cp "$RUNNER_TEMP/update.json" update.json
+          cp "$RUNNER_TEMP/release.json" website/release.json
+          cp "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" website/src/appcast.xml
+          npm --prefix website test
+          git add update.json website/release.json website/src/appcast.xml
+          if git diff --cached --quiet; then
+            echo "The public feeds already contain this release."
+          else
+            git commit -m "同步产品网站与应用更新至 QuitHide ${{ steps.release.outputs.tag }}"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the mutable COS release pointer
+        shell: bash
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/coscli" cp "$RUNNER_TEMP/release.json" cos://quithide/latest.json --meta "Cache-Control:public, max-age=300, must-revalidate#Content-Type:application/json"
+          curl --fail --location --retry 5 --retry-delay 3 "$QUITHIDE_DOWNLOAD_BASE_URL/latest.json?release=${{ steps.release.outputs.tag }}&run=${GITHUB_RUN_ID}" --output "$RUNNER_TEMP/public-latest.json"
+          if [[ "$(jq -r '.version' "$RUNNER_TEMP/public-latest.json")" != "${{ steps.release.outputs.version }}" ]]; then
+            echo "Public COS latest.json did not update to the expected version." >&2
+            exit 1
+          fi
+
+      - name: Trigger EdgeOne deployment when configured
         if: env.EDGEONE_DEPLOY_HOOK_URL != ''
         shell: bash
         run: curl --fail --silent --show-error --request POST "$EDGEONE_DEPLOY_HOOK_URL"
+
+      - name: Verify the live EdgeOne feeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_appcast_sha="$(sha256sum "website/src/appcast.xml" | awk '{print $1}')"
+          version="${{ steps.release.outputs.version }}"
+          for attempt in {1..30}; do
+            cache_buster="${{ steps.commit.outputs.sha }}-$attempt"
+            if curl --fail --location --silent --show-error "https://quithide.com/appcast.xml?release=$cache_buster" --output "$RUNNER_TEMP/live-appcast.xml" &&
+               curl --fail --location --silent --show-error "https://quithide.com/release.json?release=$cache_buster" --output "$RUNNER_TEMP/live-release.json" &&
+               [[ "$(sha256sum "$RUNNER_TEMP/live-appcast.xml" | awk '{print $1}')" == "$expected_appcast_sha" ]] &&
+               [[ "$(jq -r '.version' "$RUNNER_TEMP/live-release.json")" == "$version" ]]; then
+              echo "EdgeOne is serving the verified appcast and release metadata."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "EdgeOne did not publish the verified feeds within five minutes." >&2
+          exit 1
