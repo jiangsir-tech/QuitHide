@@ -9,6 +9,7 @@ const release = JSON.parse(await readFile(path.join(outputDirectory, "release.js
 const chinese = await readFile(path.join(outputDirectory, "index.html"), "utf8");
 const english = await readFile(path.join(outputDirectory, "en/index.html"), "utf8");
 const styles = await readFile(path.join(outputDirectory, "styles.css"), "utf8");
+const chineseText = chinese.replace(/<[^>]+>/g, "");
 
 for (const [label, content] of [["Chinese page", chinese], ["English page", english]]) {
   if (content.includes("{{")) throw new Error(`${label} contains unresolved tokens`);
@@ -22,12 +23,24 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
   }
 }
 
+for (const copy of [
+  "在 Mac 上自动隐藏或退出不需要的 App",
+  "可以给不同 App 单独设置规则——离开台前一段时间后自动隐藏、自动退出，或者完全不处理。",
+]) {
+  if (!chineseText.includes(copy)) throw new Error(`Chinese hero is missing approved copy: ${copy}`);
+}
+
+if (!/h1\s*\{[^}]*letter-spacing:\s*-0\.03em\b/s.test(styles)) {
+  throw new Error("Product name needs the approved letter spacing");
+}
+
 if (!/\.product-visual img\s*\{[^}]*\bheight:\s*auto\b/s.test(styles)) {
   throw new Error("Product screenshot must preserve its intrinsic aspect ratio");
 }
 
 for (const [pattern, message] of [
   [/\.button\s*\{[^}]*\bgap:\s*4px\b/s, "Download button text needs explicit spacing"],
+  [/\.nowrap\s*\{[^}]*white-space:\s*nowrap\b/s, "Approved hero phrases must stay together"],
   [/\.soft \.eyebrow\s*\{[^}]*var\(--blue-on-soft\)/s, "Soft sections need an accessible accent color"],
   [
     /a:focus-visible,\s*button:focus-visible,\s*summary:focus-visible\s*\{[^}]*outline:\s*3px\s+solid[^}]*outline-offset:\s*3px/s,

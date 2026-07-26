@@ -25,6 +25,7 @@ body {
 a { color: inherit; text-decoration: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--blue-hover); outline-offset: 3px; }
+.nowrap { white-space: nowrap; }
 .shell { width: min(1120px, calc(100% - 48px)); margin-inline: auto; }
 .skip-link { position: fixed; top: -80px; left: 16px; z-index: 100; padding: 10px 14px; background: var(--text); color: white; border-radius: 8px; }
 .skip-link:focus { top: 16px; }
@@ -48,7 +49,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px soli
 .hero-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(390px, 0.95fr); gap: 76px; align-items: center; }
 .badge { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; padding: 6px 11px; border: 1px solid #cdd5cd; border-radius: 999px; color: var(--green); background: #f7faf6; font-size: 12px; font-weight: 700; }
 .badge::before { width: 7px; height: 7px; border-radius: 50%; background: #1d9b61; content: ""; box-shadow: 0 0 0 4px rgba(29, 155, 97, 0.1); }
-h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spacing: -0.064em; }
+h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spacing: -0.03em; }
 .hero h2 { max-width: 680px; margin: 28px 0 14px; font-size: clamp(28px, 3.5vw, 44px); line-height: 1.2; letter-spacing: -0.042em; }
 .hero-summary { max-width: 640px; margin: 0; color: var(--muted); font-size: 18px; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
