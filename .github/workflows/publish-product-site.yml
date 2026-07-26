@@ -55,7 +55,18 @@ jobs:
 
           release_dir="$RUNNER_TEMP/quithide-release"
           mkdir -p "$release_dir"
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$tag" > "$RUNNER_TEMP/release-api.json"
+          gh api \
+            --paginate \
+            --slurp \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            > "$RUNNER_TEMP/release-pages.json"
+          jq --arg tag "$tag" '
+            [.[][] | select(.tag_name == $tag)]
+            | if length == 1 then .[0]
+              elif length == 0 then error("GitHub release does not exist: " + $tag)
+              else error("Duplicate GitHub releases found: " + $tag)
+              end
+          ' "$RUNNER_TEMP/release-pages.json" > "$RUNNER_TEMP/release-api.json"
           if [[ "$(jq -r '.prerelease' "$RUNNER_TEMP/release-api.json")" != "false" ]]; then
             echo "Prereleases cannot enter the stable feed." >&2
             exit 1
