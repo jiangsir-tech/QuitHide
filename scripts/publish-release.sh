@@ -24,9 +24,23 @@ if ! /usr/bin/command -v gh >/dev/null 2>&1; then
 fi
 gh auth status >/dev/null
 
+release_by_tag() {
+    gh api \
+        --paginate \
+        --slurp \
+        'repos/jiangsir-tech/QuitHide/releases?per_page=100' \
+        | jq -c --arg tag "$TAG_NAME" '
+            [.[][] | select(.tag_name == $tag)]
+            | if length == 1 then .[0]
+              elif length == 0 then error("GitHub release does not exist: " + $tag)
+              else error("Duplicate GitHub releases found: " + $tag)
+              end
+        '
+}
+
 RELEASE_COMMIT="$(/usr/bin/git -C "$PROJECT_DIR" rev-parse HEAD)"
 if [[ "$RESUME_MODE" == "1" ]]; then
-    RELEASE_JSON="$(gh api "repos/jiangsir-tech/QuitHide/releases/tags/$TAG_NAME")"
+    RELEASE_JSON="$(release_by_tag)"
     /usr/bin/printf 'Resuming existing GitHub release workflow for %s.\n' "$TAG_NAME"
 else
     "$PROJECT_DIR/scripts/release-notarized.sh"
@@ -55,7 +69,7 @@ PY
         --title "QuitHide $TAG_NAME" \
         --notes-file "$RELEASE_NOTES_PATH"
 
-    RELEASE_JSON="$(gh api "repos/jiangsir-tech/QuitHide/releases/tags/$TAG_NAME")"
+    RELEASE_JSON="$(release_by_tag)"
 fi
 if [[ "$(jq -r '.prerelease' <<<"$RELEASE_JSON")" != "false" ]]; then
     /usr/bin/printf 'The GitHub release is unexpectedly marked as a prerelease.\n' >&2
