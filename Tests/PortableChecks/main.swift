@@ -188,15 +188,6 @@ expect(
     "post-deadline retries still respect their cooldown"
 )
 
-let prerelease = SemanticVersion("0.3.0-beta.9")!
-let nextPrerelease = SemanticVersion("0.3.0-beta.10")!
-expect(prerelease < nextPrerelease, "prerelease identifiers compare numerically")
-expect(
-    SemanticVersion("1.2.3+build.9") == SemanticVersion("1.2.3"),
-    "build metadata does not affect precedence"
-)
-expect(SemanticVersion("1.0.0-") == nil, "empty prerelease is rejected")
-
 expect(
     MenuHeightPolicy.windowHeight(
         runningAppCount: 0,
@@ -423,123 +414,6 @@ expect(
         candidates: rowActionCandidates
     ) == Set(["target#1", "target#2"]),
     "row quit includes hidden snapshot instances and excludes newer processes"
-)
-
-expect(UpdateChecker.isUpdateNewer(
-    currentVersion: SemanticVersion("0.2.2")!,
-    currentBuild: 40,
-    availableVersion: SemanticVersion("0.3.0")!,
-    availableBuild: 1
-), "newer semantic version wins even with a lower build")
-expect(!UpdateChecker.isUpdateNewer(
-    currentVersion: SemanticVersion("0.2.2")!,
-    currentBuild: 4,
-    availableVersion: SemanticVersion("0.2.2")!,
-    availableBuild: 4
-), "same version and build is up to date")
-expect(
-    SemanticVersion("1.0.0-ALPHA")! < SemanticVersion("1.0.0-alpha")!,
-    "prerelease text comparison is case-sensitive"
-)
-expect(SemanticVersion("1.0.0-01") == nil, "numeric prerelease leading zeroes are rejected")
-expect(SemanticVersion("1.0") == nil, "incomplete semantic versions are rejected")
-expect(
-    UpdateChecker.isAllowedDownloadURL(URL(
-        string: "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.3.0"
-    )!),
-    "the official HTTPS Releases URL is accepted"
-)
-expect(
-    !UpdateChecker.isAllowedDownloadURL(URL(
-        string: "https://github.com/attacker/QuitHide/releases/tag/v0.3.0"
-    )!),
-    "another repository's download URL is rejected"
-)
-
-let updatePolicyNow = Date(timeIntervalSince1970: 2_000_000)
-expect(
-    UpdateReminderPolicy.automaticChecksDefaultEnabled,
-    "automatic update checks are enabled for a fresh install"
-)
-expect(
-    UpdateReminderPolicy.shouldPresent(
-        available: UpdateReleaseIdentity(version: "0.3.0", build: 1),
-        skipped: nil,
-        remindAfter: nil,
-        now: updatePolicyNow
-    ),
-    "an available update is presented when it is not deferred"
-)
-expect(
-    !UpdateReminderPolicy.shouldPresent(
-        available: UpdateReleaseIdentity(version: "0.3.0", build: 1),
-        skipped: UpdateReleaseIdentity(version: "0.3.0", build: 1),
-        remindAfter: nil,
-        now: updatePolicyNow
-    ),
-    "skipping suppresses the exact update version"
-)
-expect(
-    UpdateReminderPolicy.shouldPresent(
-        available: UpdateReleaseIdentity(version: "0.3.0", build: 2),
-        skipped: UpdateReleaseIdentity(version: "0.3.0", build: 1),
-        remindAfter: nil,
-        now: updatePolicyNow
-    ),
-    "a newer version is not suppressed by an older skipped version"
-)
-expect(
-    UpdateReleaseIdentity(version: "v0.3.0+build.10", build: 10).version == "0.3.0",
-    "update reminder identities normalize semantic versions"
-)
-expect(
-    !UpdateReminderPolicy.shouldClearSkippedUpdate(
-        installedVersion: "0.2.4",
-        installedBuild: 99,
-        skipped: UpdateReleaseIdentity(version: "0.3.0", build: 10)
-    ),
-    "an up-to-date response does not clear a future skipped version"
-)
-expect(
-    UpdateReminderPolicy.shouldClearSkippedUpdate(
-        installedVersion: "0.3.0",
-        installedBuild: 10,
-        skipped: UpdateReleaseIdentity(version: "0.3.0", build: 10)
-    ),
-    "installing the skipped build clears its reminder identity"
-)
-expect(
-    !UpdateReminderPolicy.shouldPresent(
-        available: UpdateReleaseIdentity(version: "0.3.0", build: 1),
-        skipped: nil,
-        remindAfter: updatePolicyNow.addingTimeInterval(60),
-        now: updatePolicyNow
-    ),
-    "a future reminder date temporarily hides the update prompt"
-)
-expect(
-    UpdateReminderPolicy.nextAutomaticCheckDate(
-        now: updatePolicyNow,
-        lastCheckAt: nil
-    ) == updatePolicyNow.addingTimeInterval(UpdateReminderPolicy.launchDelay),
-    "the first update check waits for the launch delay"
-)
-let recentUpdateCheck = updatePolicyNow.addingTimeInterval(-60 * 60)
-expect(
-    UpdateReminderPolicy.nextAutomaticCheckDate(
-        now: updatePolicyNow,
-        lastCheckAt: recentUpdateCheck
-    ) == recentUpdateCheck.addingTimeInterval(UpdateReminderPolicy.checkInterval),
-    "a recent update check schedules the 24-hour boundary"
-)
-expect(
-    UpdateReminderPolicy.shouldPresent(
-        available: UpdateReleaseIdentity(version: "0.3.0", build: 1),
-        skipped: nil,
-        remindAfter: updatePolicyNow.addingTimeInterval(-1),
-        now: updatePolicyNow,
-    ),
-    "an expired reminder makes the update prompt visible again"
 )
 
 let normalQuitRequestedAt = Date(timeIntervalSince1970: 3_000_000)

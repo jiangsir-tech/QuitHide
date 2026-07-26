@@ -25,8 +25,6 @@ cd "$PROJECT_DIR"
     Sources/QuitHide/AutomationTiming.swift \
     Sources/QuitHide/MenuHeightPolicy.swift \
     Sources/QuitHide/QuitRequestPolicy.swift \
-    Sources/QuitHide/UpdateReminderPolicy.swift \
-    Sources/QuitHide/UpdateChecker.swift \
     Tests/PortableChecks/main.swift \
     -o "$CHECK_DIR/QuitHideRegressionChecks"
 "$CHECK_DIR/QuitHideRegressionChecks"
@@ -35,4 +33,17 @@ cd "$PROJECT_DIR"
 # of the XCTest bundle. Building in a fresh system temporary directory avoids
 # that environmental failure and ensures the Swift Testing suites always run.
 /usr/bin/printf 'Running Swift Testing suites.\n'
-/usr/bin/xcrun swift test --scratch-path "$SWIFT_TEST_DIR"
+/usr/bin/xcrun swift build --build-tests --scratch-path "$SWIFT_TEST_DIR"
+SWIFT_TEST_BIN_DIR="$(/usr/bin/xcrun swift build \
+    --scratch-path "$SWIFT_TEST_DIR" \
+    --show-bin-path)"
+SPARKLE_FRAMEWORK="$SWIFT_TEST_DIR/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+if [[ ! -d "$SPARKLE_FRAMEWORK" ]]; then
+    /usr/bin/printf 'Sparkle framework was not resolved at: %s\n' "$SPARKLE_FRAMEWORK" >&2
+    exit 1
+fi
+/bin/mkdir -p "$SWIFT_TEST_BIN_DIR/PackageFrameworks"
+/usr/bin/ditto --norsrc \
+    "$SPARKLE_FRAMEWORK" \
+    "$SWIFT_TEST_BIN_DIR/PackageFrameworks/Sparkle.framework"
+/usr/bin/xcrun swift test --skip-build --scratch-path "$SWIFT_TEST_DIR"

@@ -8,9 +8,18 @@ let package = Package(
     products: [
         .executable(name: "QuitHide", targets: ["QuitHide"])
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/sparkle-project/Sparkle",
+            exact: "2.9.4"
+        )
+    ],
     targets: [
         .executableTarget(
             name: "QuitHide",
+            dependencies: [
+                .product(name: "Sparkle", package: "Sparkle")
+            ],
             path: "Sources/QuitHide",
             resources: [
                 .process("Resources")

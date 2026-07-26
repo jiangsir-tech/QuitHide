@@ -93,14 +93,6 @@ struct SettingsWarningItem: Identifiable {
     let showsLoginItemsSettingsButton: Bool
 }
 
-enum UpdateViewState: Equatable {
-    case idle
-    case checking
-    case upToDate
-    case available(AvailableUpdate)
-    case failed
-}
-
 @MainActor
 final class AppModel: ObservableObject {
     private final class BatchProgress {
@@ -177,10 +169,6 @@ final class AppModel: ObservableObject {
     @Published private(set) var defaultHideMinutes: Int
     @Published private(set) var preQuitHideEnabled: Bool
     @Published private(set) var preQuitHideMinutes: Int
-    @Published private(set) var automaticUpdateChecksEnabled: Bool
-    @Published private(set) var updateState: UpdateViewState = .idle
-    @Published private(set) var pendingUpdatePrompt: AvailableUpdate?
-    @Published private(set) var updateCheckInProgress = false
     @Published private(set) var languagePreference: AppLanguagePreference
     @Published private(set) var resolvedLanguage: ResolvedAppLanguage
     // Operation status is intentionally not user-facing. Keep it out of the
@@ -199,11 +187,6 @@ final class AppModel: ObservableObject {
         static let defaultHideMinutes = "defaultHideMinutes"
         static let preQuitHideEnabled = "preQuitHideEnabled"
         static let preQuitHideMinutes = "preQuitHideMinutes"
-        static let automaticUpdateChecksEnabled = "automaticUpdateChecksEnabled"
-        static let lastAutomaticUpdateCheckAt = "lastAutomaticUpdateCheckAt"
-        static let skippedUpdateIdentity = "skippedUpdateIdentity"
-        static let updateRemindAfter = "updateRemindAfter"
-        static let cachedAvailableUpdate = "cachedAvailableUpdate"
         static let languagePreference = "languagePreference"
         static let ruleRegistry = "ruleRegistryV1"
         static let ruleRegistryBackup = "ruleRegistryV1Backup"
@@ -230,11 +213,6 @@ final class AppModel: ObservableObject {
     private var preQuitHideStates: [String: PreQuitHideRuntimeState] = [:]
     private var timingSuspension = TimingSuspension()
     private var timer: Timer?
-    private var automaticUpdateTimer: Timer?
-    private var latestAvailableUpdate: AvailableUpdate?
-    private var updateCheckTask: Task<Void, Never>?
-    private var updateCheckShouldReport = false
-    private var updateCheckBeganAutomatically = false
     private var observers: [NSObjectProtocol] = []
 
     init(
@@ -274,14 +252,10 @@ final class AppModel: ObservableObject {
         preQuitHideEnabled = defaults.object(forKey: Keys.preQuitHideEnabled) as? Bool
             ?? AutomationDefaults.preQuitHideEnabled
         preQuitHideMinutes = max(defaults.object(forKey: Keys.preQuitHideMinutes) as? Int ?? 5, 1)
-        automaticUpdateChecksEnabled = defaults.object(
-            forKey: Keys.automaticUpdateChecksEnabled
-        ) as? Bool ?? UpdateReminderPolicy.automaticChecksDefaultEnabled
         defaults.set(defaultHideEnabled, forKey: Keys.defaultHideEnabled)
         defaults.set(defaultHideMinutes, forKey: Keys.defaultHideMinutes)
         defaults.set(preQuitHideEnabled, forKey: Keys.preQuitHideEnabled)
         defaults.set(preQuitHideMinutes, forKey: Keys.preQuitHideMinutes)
-        defaults.set(automaticUpdateChecksEnabled, forKey: Keys.automaticUpdateChecksEnabled)
         if loadedRegistry.requiresAutomationPause {
             statusMessage = "规则来自更高版本，当前版本无法解析，已暂停自动处理"
         }
@@ -289,19 +263,14 @@ final class AppModel: ObservableObject {
             timingSuspension.suspend(for: .manualPause, at: automationClock.now)
         }
 
-        restoreCachedAvailableUpdate()
-
         refreshApps()
         installObservers()
         installTimer()
-        scheduleAutomaticUpdateCheck()
         refreshLoginStatus()
     }
 
     deinit {
         timer?.invalidate()
-        automaticUpdateTimer?.invalidate()
-        updateCheckTask?.cancel()
         for observer in observers {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
@@ -532,71 +501,6 @@ final class AppModel: ObservableObject {
         preQuitHideMinutes = clampedMinutes
         defaults.set(clampedMinutes, forKey: Keys.preQuitHideMinutes)
         resetPreQuitHideRuntimeState()
-    }
-
-    func setAutomaticUpdateChecksEnabled(_ enabled: Bool) {
-        guard automaticUpdateChecksEnabled != enabled else { return }
-        automaticUpdateChecksEnabled = enabled
-        defaults.set(enabled, forKey: Keys.automaticUpdateChecksEnabled)
-
-        if enabled {
-            scheduleAutomaticUpdateCheck()
-        } else {
-            automaticUpdateTimer?.invalidate()
-            automaticUpdateTimer = nil
-            pendingUpdatePrompt = nil
-            if updateCheckBeganAutomatically {
-                updateCheckTask?.cancel()
-                finishUpdateCheck()
-            }
-        }
-    }
-
-    func checkForUpdatesManually() {
-        startUpdateCheck(manual: true)
-    }
-
-    func prepareUpdatePromptForMenuPresentation(now: Date = Date()) {
-        guard automaticUpdateChecksEnabled, let update = latestAvailableUpdate else {
-            pendingUpdatePrompt = nil
-            return
-        }
-
-        let shouldPresent = UpdateReminderPolicy.shouldPresent(
-            available: update.reminderIdentity,
-            skipped: skippedUpdateIdentity,
-            remindAfter: defaults.object(forKey: Keys.updateRemindAfter) as? Date,
-            now: now
-        )
-        pendingUpdatePrompt = shouldPresent ? update : nil
-    }
-
-    func openAvailableUpdate(_ update: AvailableUpdate) {
-        guard let validatedUpdate = UpdateChecker.validatedAvailableUpdate(update),
-              NSWorkspace.shared.open(validatedUpdate.downloadURL) else {
-            updateState = .failed
-            return
-        }
-        postponeUpdatePrompt(validatedUpdate, until: Date().addingTimeInterval(
-            UpdateReminderPolicy.reminderInterval
-        ))
-    }
-
-    func remindAboutUpdateLater(_ update: AvailableUpdate) {
-        postponeUpdatePrompt(update, until: Date().addingTimeInterval(
-            UpdateReminderPolicy.reminderInterval
-        ))
-    }
-
-    func skipUpdateVersion(_ update: AvailableUpdate) {
-        latestAvailableUpdate = update
-        cacheAvailableUpdate(update)
-        pendingUpdatePrompt = nil
-        if let data = try? JSONEncoder().encode(update.reminderIdentity) {
-            defaults.set(data, forKey: Keys.skippedUpdateIdentity)
-        }
-        defaults.removeObject(forKey: Keys.updateRemindAfter)
-        scheduleAutomaticUpdateCheck()
     }
 
     func automationStatus(for item: RunningAppItem) -> AppAutomationStatus? {
@@ -1435,146 +1339,6 @@ final class AppModel: ObservableObject {
         RunLoop.main.add(refreshTimer, forMode: .common)
     }
 
-    private func scheduleAutomaticUpdateCheck(now: Date = Date()) {
-        automaticUpdateTimer?.invalidate()
-        automaticUpdateTimer = nil
-        guard automaticUpdateChecksEnabled, updateCheckTask == nil else { return }
-
-        let fireDate = UpdateReminderPolicy.nextAutomaticCheckDate(
-            now: now,
-            lastCheckAt: defaults.object(forKey: Keys.lastAutomaticUpdateCheckAt) as? Date
-        )
-        let delay = max(fireDate.timeIntervalSince(now), 0.1)
-        let updateTimer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.automaticUpdateTimer = nil
-                guard self.automaticUpdateChecksEnabled else { return }
-                self.startUpdateCheck(manual: false)
-            }
-        }
-        automaticUpdateTimer = updateTimer
-        RunLoop.main.add(updateTimer, forMode: .common)
-    }
-
-    private func startUpdateCheck(manual: Bool) {
-        if updateCheckTask != nil {
-            if manual {
-                updateCheckShouldReport = true
-                updateState = .checking
-            }
-            return
-        }
-
-        automaticUpdateTimer?.invalidate()
-        automaticUpdateTimer = nil
-        updateCheckShouldReport = manual
-        updateCheckBeganAutomatically = !manual
-        updateCheckInProgress = true
-        if manual {
-            updateState = .checking
-        }
-
-        let now = Date()
-        if let remindAfter = defaults.object(forKey: Keys.updateRemindAfter) as? Date,
-           remindAfter <= now {
-            defaults.removeObject(forKey: Keys.updateRemindAfter)
-        }
-        if !manual {
-            // Failed background checks count as attempts so an offline Mac does
-            // not retry GitHub every time the menu opens.
-            defaults.set(now, forKey: Keys.lastAutomaticUpdateCheckAt)
-        }
-        updateCheckTask = Task { [weak self] in
-            do {
-                let result = try await UpdateChecker.check()
-                guard !Task.isCancelled, let self else { return }
-                self.completeUpdateCheck(with: result)
-            } catch {
-                guard !Task.isCancelled, let self else { return }
-                self.completeUpdateCheckAfterFailure()
-            }
-        }
-    }
-
-    private func completeUpdateCheck(with result: UpdateCheckResult) {
-        if !updateCheckBeganAutomatically {
-            defaults.set(Date(), forKey: Keys.lastAutomaticUpdateCheckAt)
-        }
-        switch result {
-        case .upToDate:
-            latestAvailableUpdate = nil
-            pendingUpdatePrompt = nil
-            updateState = .upToDate
-            defaults.removeObject(forKey: Keys.cachedAvailableUpdate)
-            let installedVersion = Bundle.main.object(
-                forInfoDictionaryKey: "CFBundleShortVersionString"
-            ) as? String ?? "0.0.0"
-            let installedBuild = Int(
-                Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
-            ) ?? 0
-            if UpdateReminderPolicy.shouldClearSkippedUpdate(
-                installedVersion: installedVersion,
-                installedBuild: installedBuild,
-                skipped: skippedUpdateIdentity
-            ) {
-                defaults.removeObject(forKey: Keys.skippedUpdateIdentity)
-            }
-            defaults.removeObject(forKey: Keys.updateRemindAfter)
-        case let .updateAvailable(update):
-            latestAvailableUpdate = update
-            cacheAvailableUpdate(update)
-            updateState = .available(update)
-        }
-        finishUpdateCheck()
-    }
-
-    private func completeUpdateCheckAfterFailure() {
-        if updateCheckShouldReport {
-            updateState = .failed
-        }
-        finishUpdateCheck()
-    }
-
-    private func finishUpdateCheck() {
-        updateCheckTask = nil
-        updateCheckInProgress = false
-        updateCheckShouldReport = false
-        updateCheckBeganAutomatically = false
-        scheduleAutomaticUpdateCheck()
-    }
-
-    private func postponeUpdatePrompt(_ update: AvailableUpdate, until date: Date) {
-        latestAvailableUpdate = update
-        cacheAvailableUpdate(update)
-        pendingUpdatePrompt = nil
-        defaults.set(date, forKey: Keys.updateRemindAfter)
-        defaults.removeObject(forKey: Keys.skippedUpdateIdentity)
-        scheduleAutomaticUpdateCheck()
-    }
-
-    private var skippedUpdateIdentity: UpdateReleaseIdentity? {
-        guard let data = defaults.data(forKey: Keys.skippedUpdateIdentity) else { return nil }
-        return try? JSONDecoder().decode(UpdateReleaseIdentity.self, from: data)
-    }
-
-    private func cacheAvailableUpdate(_ update: AvailableUpdate) {
-        guard let data = try? JSONEncoder().encode(update) else { return }
-        defaults.set(data, forKey: Keys.cachedAvailableUpdate)
-    }
-
-    private func restoreCachedAvailableUpdate() {
-        guard let data = defaults.data(forKey: Keys.cachedAvailableUpdate),
-              let update = try? JSONDecoder().decode(AvailableUpdate.self, from: data),
-              let validatedUpdate = UpdateChecker.validatedAvailableUpdate(update),
-              UpdateChecker.isUpdateNewer(validatedUpdate) else {
-            defaults.removeObject(forKey: Keys.cachedAvailableUpdate)
-            return
-        }
-        latestAvailableUpdate = validatedUpdate
-        updateState = .available(validatedUpdate)
-    }
-
     private func checkIdleApps() {
         refreshApps()
         guard automationEnabled else { return }
@@ -2317,6 +2081,7 @@ struct AppRow: View {
 
 struct SettingsSheet: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var updateController: SparkleUpdateController
 
     private var versionText: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
@@ -2505,43 +2270,19 @@ struct SettingsSheet: View {
 
                 HStack(spacing: 12) {
                     Toggle(model.localized(.settingsUpdateAutomatic), isOn: Binding(
-                        get: { model.automaticUpdateChecksEnabled },
-                        set: { model.setAutomaticUpdateChecksEnabled($0) }
+                        get: { updateController.automaticallyChecksForUpdates },
+                        set: { updateController.setAutomaticallyChecksForUpdates($0) }
                     ))
                     .toggleStyle(.switch)
                     .controlSize(.small)
 
                     Spacer(minLength: 8)
 
-                    Button(updateButtonTitle) {
-                        handleUpdateButton()
+                    Button(model.localized(.updateActionCheck)) {
+                        updateController.checkForUpdates()
                     }
-                    .disabled(isChecking)
+                    .disabled(!updateController.canCheckForUpdates)
                     .suppressFocusEffect()
-                }
-
-                if let statusText = updateStatusText {
-                    HStack(spacing: 7) {
-                        Image(systemName: updateStatusSymbol)
-                            .foregroundStyle(updateStatusColor)
-
-                        Text(statusText)
-                            .foregroundStyle(.primary)
-                    }
-                    .font(.callout.weight(.medium))
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        updateStatusColor.opacity(0.12),
-                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(updateStatusColor.opacity(0.22), lineWidth: 0.5)
-                    }
-                    .accessibilityElement(children: .combine)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
                 Link(
@@ -2550,7 +2291,6 @@ struct SettingsSheet: View {
                 )
                 .font(.caption)
             }
-            .animation(.easeOut(duration: 0.18), value: model.updateState)
         }
         .padding(24)
         .frame(width: 410)
@@ -2564,65 +2304,6 @@ struct SettingsSheet: View {
         }
     }
 
-    private var isChecking: Bool {
-        model.updateCheckInProgress
-    }
-
-    private var updateButtonTitle: String {
-        if case .available = model.updateState {
-            return model.localized(.updateActionDownload)
-        }
-        return model.localized(isChecking ? .updateStatusChecking : .updateActionCheck)
-    }
-
-    private var updateStatusText: String? {
-        switch model.updateState {
-        case .idle, .checking:
-            return nil
-        case .upToDate:
-            return model.localized(.updateStatusUpToDate)
-        case let .available(update):
-            return model.localized(.updateStatusAvailable, replacements: [
-                "version": update.version
-            ])
-        case .failed:
-            return model.localized(.updateStatusFailed)
-        }
-    }
-
-    private var updateStatusSymbol: String {
-        switch model.updateState {
-        case .upToDate:
-            return "checkmark.circle.fill"
-        case .available:
-            return "arrow.up.circle.fill"
-        case .failed:
-            return "exclamationmark.circle.fill"
-        case .idle, .checking:
-            return "info.circle.fill"
-        }
-    }
-
-    private var updateStatusColor: Color {
-        switch model.updateState {
-        case .upToDate:
-            return .green
-        case .available:
-            return .blue
-        case .failed:
-            return .red
-        case .idle, .checking:
-            return .secondary
-        }
-    }
-
-    private func handleUpdateButton() {
-        if case let .available(update) = model.updateState {
-            model.openAvailableUpdate(update)
-            return
-        }
-        model.checkForUpdatesManually()
-    }
 }
 
 private final class SettingsWindowTrackingView: NSView {
@@ -2792,6 +2473,7 @@ private struct ForceQuitRequest: Identifiable {
 
 struct MenuContentView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var updateController: SparkleUpdateController
     @Environment(\.openWindow) private var openWindow
     @State private var catalogScope: RuleCatalogScope = .running
     @State private var pendingForceQuitRequest: ForceQuitRequest?
@@ -3033,36 +2715,23 @@ struct MenuContentView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
 
-            if let update = model.pendingUpdatePrompt {
+            if let updateVersion = updateController.pendingUpdateVersion {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 7) {
                         Image(systemName: "arrow.up.circle.fill")
                             .foregroundStyle(.blue)
                         Text(model.localized(.menuUpdateAvailable, replacements: [
-                            "version": update.version
+                            "version": updateVersion
                         ]))
                             .font(.callout.weight(.semibold))
                         Spacer(minLength: 0)
                     }
 
                     HStack(spacing: 8) {
-                        Button(model.localized(.menuUpdateDownload)) {
-                            model.openAvailableUpdate(update)
+                        Button(model.localized(.updateActionCheck)) {
+                            updateController.checkForUpdates()
                         }
                         .buttonStyle(.borderedProminent)
-
-                        Button(model.localized(.menuUpdateLater)) {
-                            model.remindAboutUpdateLater(update)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Spacer(minLength: 0)
-
-                        Button(model.localized(.menuUpdateSkip)) {
-                            model.skipUpdateVersion(update)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
                     }
                     .controlSize(.small)
                 }
@@ -3228,7 +2897,7 @@ struct MenuContentView: View {
         .frame(width: 410, height: menuHeight, alignment: .top)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.92))
         .environment(\.locale, model.effectiveLocale)
-        .animation(.easeOut(duration: 0.18), value: model.pendingUpdatePrompt)
+        .animation(.easeOut(duration: 0.18), value: updateController.pendingUpdateVersion)
         .alert(item: $pendingForceQuitRequest) { request in
             Alert(
                 title: Text(model.localized(.dialogForceQuitTitle, replacements: [
@@ -3280,7 +2949,6 @@ struct MenuContentView: View {
         model.refreshSystemLanguageIfNeeded()
         if refreshApps {
             model.refreshApps()
-            model.prepareUpdatePromptForMenuPresentation()
         }
     }
 
@@ -3430,11 +3098,13 @@ struct MenuContentView: View {
 @main
 struct QuitHideApp: App {
     @StateObject private var model = AppModel()
+    @StateObject private var updateController = SparkleUpdateController()
 
     var body: some Scene {
         MenuBarExtra {
             MenuContentView()
                 .environmentObject(model)
+                .environmentObject(updateController)
         } label: {
             Label("QuitHide", systemImage: "rectangle.on.rectangle.slash")
         }
@@ -3444,6 +3114,7 @@ struct QuitHideApp: App {
         Window(model.localized(.settingsTitle), id: "settings") {
             SettingsSheet()
                 .environmentObject(model)
+                .environmentObject(updateController)
         }
         .windowResizability(.contentSize)
     }
