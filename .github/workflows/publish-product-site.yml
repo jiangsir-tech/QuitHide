@@ -70,6 +70,7 @@ jobs:
             --manifest "$RUNNER_TEMP/update.json" \
             --dmg "${dmg_files[0]}" \
             --checksum "${checksum_files[0]}" \
+            --fallback-feed website/release.json \
             --output "$RUNNER_TEMP/release.json"
           cp "$RUNNER_TEMP/release.json" website/release.json
           npm --prefix website test

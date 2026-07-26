@@ -8,6 +8,10 @@ const manifest = JSON.parse(await readFile(required("manifest"), "utf8"));
 const dmgPath = required("dmg");
 const checksumPath = required("checksum");
 const outputPath = required("output");
+const fallbackFeedPath = argumentsMap.get("fallback-feed");
+const fallbackFeed = fallbackFeedPath
+  ? JSON.parse(await readFile(fallbackFeedPath, "utf8"))
+  : null;
 
 const version = manifest.version;
 const tagName = `v${version}`;
@@ -17,7 +21,9 @@ if (releaseAPI.tag_name !== tagName) {
 if (releaseAPI.draft || releaseAPI.prerelease) {
   throw new Error("The website feed accepts stable published releases only");
 }
-if (!manifest.releaseNotes?.trim() || !manifest.releaseNotesEn?.trim()) {
+const englishReleaseNotes = manifest.releaseNotesEn?.trim()
+  || (fallbackFeed?.version === version ? fallbackFeed.releaseNotes?.en?.trim() : null);
+if (!manifest.releaseNotes?.trim() || !englishReleaseNotes) {
   throw new Error("The update manifest requires Chinese and English release notes");
 }
 
@@ -57,7 +63,7 @@ const feed = {
   publishedAt: releaseAPI.published_at,
   releaseNotes: {
     "zh-CN": manifest.releaseNotes,
-    en: manifest.releaseNotesEn,
+    en: englishReleaseNotes,
   },
   githubReleaseURL: releaseAPI.html_url,
   file: {
