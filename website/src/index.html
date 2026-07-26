@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QuitHide｜自动隐藏或退出闲置的 Mac App</title>
+  <meta name="description" content="为每个 Mac App 设置独立的隐藏、退出或忽略规则。免费开源，完全在本机运行。">
+  <link rel="canonical" href="{{SITE_URL}}/">
+  <link rel="alternate" hreflang="zh-CN" href="{{SITE_URL}}/">
+  <link rel="alternate" hreflang="en" href="{{SITE_URL}}/en/">
+  <link rel="alternate" hreflang="x-default" href="{{SITE_URL}}/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="QuitHide">
+  <meta property="og:title" content="QuitHide｜自动隐藏或退出闲置的 Mac App">
+  <meta property="og:description" content="每个 App 独立设置，完全在本机运行。">
+  <meta property="og:url" content="{{SITE_URL}}/">
+  <meta property="og:image" content="{{SITE_URL}}/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="zh_CN">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="QuitHide">
+  <meta name="twitter:description" content="自动隐藏或退出暂时不用的 Mac App。">
+  <meta name="twitter:image" content="{{SITE_URL}}/og.png">
+  <meta name="theme-color" content="#f3f4f2">
+  <link rel="icon" href="/images/quithide-icon.webp" type="image/webp">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="application/ld+json">{{SOFTWARE_JSON_LD_ZH}}</script>
+  <script type="module" src="/site.js"></script>
+</head>
+<body data-release-feed="{{RELEASE_FEED_URL}}">
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <header class="site-header">
+    <div class="shell nav">
+      <a class="wordmark" href="/" aria-label="QuitHide 首页"><img src="/images/quithide-icon.webp" alt=""><span>QuitHide</span></a>
+      <nav class="nav-links" aria-label="主要导航">
+        <a href="#features">功能</a>
+        <a href="#privacy">隐私</a>
+        <a href="#release">版本</a>
+        <a href="https://github.com/jiangsir-tech/QuitHide">GitHub</a>
+        <a class="language-link" href="/en/" lang="en">English</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="shell hero-grid">
+        <div>
+          <span class="badge">免费开源 · Apple 公证</span>
+          <h1>QuitHide</h1>
+          <h2>让不常用的 Mac App 自动隐藏或正常退出。</h2>
+          <p class="hero-summary">为每个 App 设置独立规则和等待时间。离开前台一段时间后自动隐藏、请求正常退出，或者完全不处理。</p>
+          <div class="actions">
+            <a class="button primary" data-direct-download href="{{DIRECT_DOWNLOAD_URL}}">直接下载 <span data-release-version>v{{VERSION}}</span></a>
+            <a class="button secondary" data-github-release href="{{GITHUB_RELEASE_URL}}">前往 GitHub 下载</a>
+          </div>
+          <div class="facts" aria-label="兼容信息">
+            <span data-release-version>v{{VERSION}}</span>
+            <span>macOS {{MINIMUM_SYSTEM_VERSION}}+</span>
+            <span>Apple Silicon 与 Intel</span>
+            <span data-release-size>{{FILE_SIZE}}</span>
+          </div>
+        </div>
+        <div class="product-visual"><img src="/images/quithide-menu-zh-Hans.webp" width="820" height="1024" alt="QuitHide 中文主界面"></div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="shell">
+        <p class="eyebrow">核心功能</p>
+        <h2>设置一次，让桌面保持干净。</h2>
+        <div class="feature-grid">
+          <div class="feature"><strong>每个 App 独立设置</strong><p>分别选择自动隐藏、自动退出或不处理，并设置各自的等待时间。</p></div>
+          <div class="feature"><strong>看得见的倒计时</strong><p>清楚显示下一步动作和剩余时间，也可以暂停全部自动处理。</p></div>
+          <div class="feature"><strong>需要时立即执行</strong><p>批量提前执行规则，或右击单个 App 立即隐藏、退出或手动强制退出。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section soft" id="privacy">
+      <div class="shell privacy-grid">
+        <div><p class="eyebrow">隐私与安全</p><h2>规则留在你的 Mac 上。</h2></div>
+        <ul class="check-list">
+          <li>不上传运行中的 App 列表和用户规则</li>
+          <li>不包含分析服务或广告 SDK</li>
+          <li>自动退出使用 macOS 正常退出请求，不会自动强制退出</li>
+          <li>正式版使用 Developer ID 签名并通过 Apple 公证</li>
+          <li>源代码公开，采用 MIT License</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="release">
+      <div class="shell release-grid">
+        <div>
+          <p class="eyebrow">最新版本</p>
+          <h2 data-release-version>v{{VERSION}}</h2>
+          <div class="release-meta">
+            <div><small>发布日期</small><strong data-release-date>{{PUBLISHED_DATE_ZH}}</strong></div>
+            <div><small>最低系统</small><strong>macOS {{MINIMUM_SYSTEM_VERSION}}</strong></div>
+            <div><small>架构</small><strong>Universal 2</strong></div>
+            <div><small>安装包</small><strong data-release-size>{{FILE_SIZE}}</strong></div>
+          </div>
+        </div>
+        <div class="release-card">
+          <h3>本次更新</h3>
+          <p data-release-notes>{{RELEASE_NOTES_ZH}}</p>
+          <div class="checksum"><span>SHA-256</span><code data-release-sha>{{SHA256}}</code></div>
+          <div class="release-links">
+            <a data-direct-download href="{{DIRECT_DOWNLOAD_URL}}">下载 {{FILE_NAME}}</a>
+            <a data-github-release href="{{GITHUB_RELEASE_URL}}">完整更新记录</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="shell">
+        <p class="eyebrow">常见问题</p>
+        <h2>下载前可能关心的问题。</h2>
+        <div class="faq-list">
+          <details><summary>QuitHide 会强制结束其他 App 吗？</summary><p>自动退出不会。它发送 macOS 标准退出请求，由目标 App 决定是否显示保存提示。只有你在右键菜单中手动选择“强制退出”并再次确认时，才会强制结束。</p></details>
+          <details><summary>未设置规则的 App 会被自动处理吗？</summary><p>新安装时不会。两项附加规则默认关闭，只有你明确开启后才会作用于未设置规则的 App。</p></details>
+          <details><summary>QuitHide 会联网吗？</summary><p>规则执行完全在本机完成。联网仅用于检查稳定版更新，不会上传 App 列表或规则。</p></details>
+          <details><summary>为什么没有 Mac App Store 版本？</summary><p>独立分发版本保留了完整的 App 管理能力，并使用 Apple 官方的 Developer ID 签名和公证流程。</p></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="download">
+      <div class="shell download-panel">
+        <div><h2>下载 QuitHide</h2><p>macOS {{MINIMUM_SYSTEM_VERSION}} 或更高版本，支持 Apple Silicon 与 Intel Mac。</p></div>
+        <div class="download-actions">
+          <a class="button primary" data-direct-download href="{{DIRECT_DOWNLOAD_URL}}">直接下载 <span data-release-version>v{{VERSION}}</span></a>
+          <a class="button secondary" data-github-release href="{{GITHUB_RELEASE_URL}}">GitHub 下载</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-inner">
+      <span>© 2026 江sir爱数码 · QuitHide</span>
+      <div class="footer-links"><a href="https://github.com/jiangsir-tech/QuitHide">源代码</a><a href="https://github.com/jiangsir-tech/QuitHide/issues">问题反馈</a><a href="https://github.com/jiangsir-tech/QuitHide/blob/main/LICENSE">MIT License</a></div>
+    </div>
+  </footer>
+</body>
+</html>

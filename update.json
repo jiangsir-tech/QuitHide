@@ -3,5 +3,6 @@
   "build": 11,
   "minimumSystemVersion": "13.0",
   "releaseNotes": "新增完整的简体中文与 English 界面，并支持在设置中跟随系统或手动切换语言；优化双语界面的文案与布局；补充本地化资源完整性校验。",
+  "releaseNotesEn": "Adds complete Simplified Chinese and English interfaces, with system-following or manual language selection, refined bilingual copy and layout, and localization integrity checks.",
   "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.4.0"
 }

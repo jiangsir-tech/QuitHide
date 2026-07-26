@@ -3,3 +3,5 @@
 .DS_Store
 dist/
 tmp/
+website/dist/
+website/node_modules/

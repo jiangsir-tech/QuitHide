@@ -1,0 +1,137 @@
+name: Publish Product Site Data
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag to publish, for example v0.4.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-product-site
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      QUITHIDE_DOWNLOAD_BASE_URL: ${{ vars.QUITHIDE_DOWNLOAD_BASE_URL }}
+      TENCENT_COS_BUCKET: ${{ vars.TENCENT_COS_BUCKET }}
+      TENCENT_COS_REGION: ap-hongkong
+      EDGEONE_DEPLOY_HOOK_URL: ${{ secrets.EDGEONE_DEPLOY_HOOK_URL }}
+    steps:
+      - name: Check out the product repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Resolve and download the stable release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid stable tag: $tag" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/quithide-release"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/$tag" > "$RUNNER_TEMP/release-api.json"
+          gh release download "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'QuitHide-*-universal.dmg' \
+            --pattern 'QuitHide-*-universal.dmg.sha256' \
+            --dir "$RUNNER_TEMP/quithide-release"
+          git show "$tag:update.json" > "$RUNNER_TEMP/update.json"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Verify assets and generate the website release feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmg_files=("$RUNNER_TEMP"/quithide-release/*.dmg)
+          checksum_files=("$RUNNER_TEMP"/quithide-release/*.dmg.sha256)
+          if [[ ${#dmg_files[@]} -ne 1 || ${#checksum_files[@]} -ne 1 ]]; then
+            echo "Expected exactly one DMG and one checksum file" >&2
+            exit 1
+          fi
+          node website/scripts/create-release-feed.mjs \
+            --release "$RUNNER_TEMP/release-api.json" \
+            --manifest "$RUNNER_TEMP/update.json" \
+            --dmg "${dmg_files[0]}" \
+            --checksum "${checksum_files[0]}" \
+            --output "$RUNNER_TEMP/release.json"
+          cp "$RUNNER_TEMP/release.json" website/release.json
+          npm --prefix website test
+
+      - name: Upload immutable release files to Hong Kong COS
+        if: vars.QUITHIDE_COS_ENABLED == 'true'
+        shell: bash
+        env:
+          TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+          TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          : "${QUITHIDE_DOWNLOAD_BASE_URL:?Set QUITHIDE_DOWNLOAD_BASE_URL}"
+          : "${TENCENT_COS_BUCKET:?Set TENCENT_COS_BUCKET}"
+          : "${TENCENT_SECRET_ID:?Set TENCENT_SECRET_ID}"
+          : "${TENCENT_SECRET_KEY:?Set TENCENT_SECRET_KEY}"
+          curl --fail --location --silent --show-error \
+            https://github.com/tencentyun/coscli/releases/download/v1.0.8/coscli-v1.0.8-linux-amd64 \
+            --output "$RUNNER_TEMP/coscli"
+          echo "7165f2ae16c5f7ac495864c963ca574a76e04ec72680d7bc8a8eee3234d8cf91  $RUNNER_TEMP/coscli" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/coscli"
+          "$RUNNER_TEMP/coscli" config set \
+            --secret_id "$TENCENT_SECRET_ID" \
+            --secret_key "$TENCENT_SECRET_KEY"
+          "$RUNNER_TEMP/coscli" config add \
+            --bucket "$TENCENT_COS_BUCKET" \
+            --region "$TENCENT_COS_REGION" \
+            --endpoint "cos.${TENCENT_COS_REGION}.myqcloud.com" \
+            --alias quithide
+          tag="${{ steps.release.outputs.tag }}"
+          dmg=("$RUNNER_TEMP"/quithide-release/*.dmg)
+          checksum=("$RUNNER_TEMP"/quithide-release/*.dmg.sha256)
+          "$RUNNER_TEMP/coscli" cp "${dmg[0]}" "cos://quithide/releases/$tag/${dmg[0]##*/}"
+          "$RUNNER_TEMP/coscli" cp "${checksum[0]}" "cos://quithide/releases/$tag/${checksum[0]##*/}"
+          "$RUNNER_TEMP/coscli" cp "$RUNNER_TEMP/release.json" cos://quithide/latest.json
+
+      - name: Verify the public COS download
+        if: vars.QUITHIDE_COS_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          direct_url=$(jq -r '.file.directDownloadURL' "$RUNNER_TEMP/release.json")
+          expected_sha=$(jq -r '.file.sha256' "$RUNNER_TEMP/release.json")
+          curl --fail --location --retry 5 --retry-delay 4 \
+            "$direct_url" --output "$RUNNER_TEMP/public-release.dmg"
+          echo "$expected_sha  $RUNNER_TEMP/public-release.dmg" | sha256sum --check --strict
+
+      - name: Commit the verified release feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- website/release.json; then
+            echo "The website already contains this release feed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add website/release.json
+          git commit -m "同步产品网站至 QuitHide ${{ steps.release.outputs.tag }}"
+          git push origin HEAD:main
+
+      - name: Trigger EdgeOne deployment
+        if: env.EDGEONE_DEPLOY_HOOK_URL != ''
+        shell: bash
+        run: curl --fail --silent --show-error --request POST "$EDGEONE_DEPLOY_HOOK_URL"

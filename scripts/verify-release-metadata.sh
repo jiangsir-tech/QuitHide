@@ -22,13 +22,15 @@ required = {
     "build": int,
     "minimumSystemVersion": str,
     "releaseNotes": str,
+    "releaseNotesEn": str,
     "downloadURL": str,
 }
 for key, expected_type in required.items():
     if key not in manifest or type(manifest[key]) is not expected_type:
         raise SystemExit(f"Invalid update.json field: {key}")
-if not manifest["releaseNotes"].strip():
-    raise SystemExit("update.json releaseNotes must not be empty")
+for notes_key in ("releaseNotes", "releaseNotesEn"):
+    if not manifest[notes_key].strip():
+        raise SystemExit(f"update.json {notes_key} must not be empty")
 
 print(
     manifest["version"],

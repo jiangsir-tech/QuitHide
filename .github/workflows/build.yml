@@ -16,6 +16,8 @@ jobs:
         run: ./scripts/verify-release-metadata.sh
       - name: Run tests
         run: ./scripts/test.sh
+      - name: Build product website
+        run: npm --prefix website run build
       - name: Build Universal 2 app
         run: ./scripts/build-app.sh
       - name: Verify architectures

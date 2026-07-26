@@ -1,0 +1,26 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --ignore-scripts",
+  "outputDirectory": "dist",
+  "nodeVersion": "22.11.0",
+  "headers": [
+    {
+      "source": "/release.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=300, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/images/*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}
