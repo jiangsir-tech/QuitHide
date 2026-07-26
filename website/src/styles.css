@@ -61,7 +61,7 @@ h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spa
 
 .product-visual { position: relative; padding: 34px 34px 0; overflow: hidden; border: 1px solid #d4d8d4; border-radius: 28px; background: linear-gradient(145deg, #e6e9e5, #f8f8f5); box-shadow: var(--shadow); }
 .product-visual::before { position: absolute; inset: -30% 10% auto; height: 50%; border-radius: 50%; background: rgba(23, 105, 224, 0.1); filter: blur(55px); content: ""; }
-.product-visual img { position: relative; width: 100%; display: block; border-radius: 16px 16px 0 0; box-shadow: 0 24px 55px rgba(20, 24, 22, 0.22); }
+.product-visual img { position: relative; width: 100%; height: auto; display: block; border-radius: 16px 16px 0 0; box-shadow: 0 24px 55px rgba(20, 24, 22, 0.22); }
 
 .section { padding: 100px 0; border-top: 1px solid var(--line); }
 .eyebrow { margin: 0 0 10px; color: var(--blue); font-size: 13px; font-weight: 760; letter-spacing: 0.04em; text-transform: uppercase; }

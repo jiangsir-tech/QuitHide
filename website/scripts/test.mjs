@@ -8,6 +8,7 @@ const outputDirectory = path.resolve(scriptDirectory, "../dist");
 const release = JSON.parse(await readFile(path.join(outputDirectory, "release.json"), "utf8"));
 const chinese = await readFile(path.join(outputDirectory, "index.html"), "utf8");
 const english = await readFile(path.join(outputDirectory, "en/index.html"), "utf8");
+const styles = await readFile(path.join(outputDirectory, "styles.css"), "utf8");
 
 for (const [label, content] of [["Chinese page", chinese], ["English page", english]]) {
   if (content.includes("{{")) throw new Error(`${label} contains unresolved tokens`);
@@ -19,6 +20,10 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
   if (!content.includes(release.githubReleaseURL)) {
     throw new Error(`${label} is missing the GitHub release URL`);
   }
+}
+
+if (!/\.product-visual img\s*\{[^}]*\bheight:\s*auto\b/s.test(styles)) {
+  throw new Error("Product screenshot must preserve its intrinsic aspect ratio");
 }
 
 console.log(`PASS: bilingual product site metadata for v${release.version}`);
