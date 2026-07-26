@@ -181,11 +181,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var updateState: UpdateViewState = .idle
     @Published private(set) var pendingUpdatePrompt: AvailableUpdate?
     @Published private(set) var updateCheckInProgress = false
+    @Published private(set) var languagePreference: AppLanguagePreference
+    @Published private(set) var resolvedLanguage: ResolvedAppLanguage
     // Operation status is intentionally not user-facing. Keep it out of the
     // published state so frequent automation updates do not invalidate the UI.
     private var statusMessage = ""
-    @Published private var rulePersistenceWarningMessage: String?
-    @Published private var loginItemWarningMessage: String?
+    @Published private var rulePersistenceWarningKey: L10n.Key?
+    @Published private var loginItemWarningKey: L10n.Key?
     @Published private(set) var launchAtLogin = false
 
     private enum Keys {
@@ -202,20 +204,14 @@ final class AppModel: ObservableObject {
         static let skippedUpdateIdentity = "skippedUpdateIdentity"
         static let updateRemindAfter = "updateRemindAfter"
         static let cachedAvailableUpdate = "cachedAvailableUpdate"
+        static let languagePreference = "languagePreference"
         static let ruleRegistry = "ruleRegistryV1"
         static let ruleRegistryBackup = "ruleRegistryV1Backup"
         static let corruptRuleRegistryBackup = "ruleRegistryV1CorruptBackup"
     }
 
-    private enum SettingsWarningText {
-        static let readOnlyRegistry = "规则来自更高版本，当前版本无法解析或显示；自动处理及依赖规则的批量操作已暂停"
-        static let saveRulesFailed = "保存规则失败，请稍后重试"
-        static let loginItemFailed = "登录项设置失败，请稍后重试"
-        static let loginItemRequiresApproval = "登录项等待系统批准。请在“系统设置 > 通用 > 登录项”中允许 QuitHide。"
-        static let loginItemNotFound = "系统未找到 QuitHide 登录项。请确认 QuitHide 位于“应用程序”文件夹后重试。"
-    }
-
     private let defaults = UserDefaults.standard
+    private var localization: AppLocalization
     private let automationClock: any AutomationClock
     private let ruleStore: RuleRegistryFileStore
     private var ruleRegistry: StoredRuleRegistry
@@ -247,6 +243,13 @@ final class AppModel: ObservableObject {
     ) {
         self.automationClock = automationClock
         self.ruleStore = ruleStore
+        let savedLanguagePreference = UserDefaults.standard.string(
+            forKey: Keys.languagePreference
+        ).flatMap(AppLanguagePreference.init(rawValue:)) ?? .system
+        let initialLocalization = AppLocalization(preference: savedLanguagePreference)
+        languagePreference = savedLanguagePreference
+        resolvedLanguage = initialLocalization.resolvedLanguage
+        localization = initialLocalization
         let savedIdleMinutes = defaults.object(forKey: Keys.idleMinutes) as? Int ?? 20
         let legacyPolicies = defaults.dictionary(forKey: Keys.policies) as? [String: String] ?? [:]
         let legacyPolicyIdleMinutes = defaults.dictionary(forKey: Keys.policyIdleMinutes) as? [String: Int] ?? [:]
@@ -315,26 +318,100 @@ final class AppModel: ObservableObject {
 
     var rulesAreEditable: Bool { isRuleRegistryWritable }
 
+    var effectiveLocale: Locale { resolvedLanguage.locale }
+
+    func localized(
+        _ key: L10n.Key,
+        replacements: [String: String] = [:]
+    ) -> String {
+        localization.text(key, replacements: replacements)
+    }
+
+    func localizedList(_ values: [String]) -> String {
+        localization.list(values)
+    }
+
+    func setLanguagePreference(_ preference: AppLanguagePreference) {
+        guard preference != languagePreference else {
+            refreshSystemLanguageIfNeeded()
+            return
+        }
+        defaults.set(preference.rawValue, forKey: Keys.languagePreference)
+        languagePreference = preference
+        applyLocalization(AppLocalization(preference: preference))
+    }
+
+    func refreshSystemLanguageIfNeeded() {
+        guard languagePreference == .system else { return }
+        let nextLocalization = AppLocalization(preference: .system)
+        guard nextLocalization.resolvedLanguage != resolvedLanguage else { return }
+        applyLocalization(nextLocalization)
+    }
+
+    func actionTitle(for action: AutoAction) -> String {
+        switch action {
+        case .unset: return localized(.actionUseDefault)
+        case .hide: return localized(.actionHide)
+        case .quit: return localized(.actionQuit)
+        case .ignore: return localized(.actionIgnore)
+        }
+    }
+
+    func rulePickerTitle(for action: AutoAction) -> String {
+        switch action {
+        case .ignore: return localized(.ruleIgnore)
+        case .unset: return localized(.ruleUnconfigured)
+        case .hide: return localized(.ruleAutomaticHide)
+        case .quit: return localized(.ruleAutomaticQuit)
+        }
+    }
+
+    func durationTitle(_ minutes: Int) -> String {
+        if minutes < 60 {
+            let key: L10n.Key = minutes == 1 ? .durationMinute : .durationMinutes
+            return localized(key, replacements: ["count": String(minutes)])
+        }
+        if minutes.isMultiple(of: 1_440) {
+            let days = minutes / 1_440
+            let key: L10n.Key = days == 1 ? .durationDay : .durationDays
+            return localized(key, replacements: ["count": String(days)])
+        }
+        if minutes.isMultiple(of: 60) {
+            let hours = minutes / 60
+            let key: L10n.Key = hours == 1 ? .durationHour : .durationHours
+            return localized(key, replacements: ["count": String(hours)])
+        }
+        return localized(.durationHoursMinutes, replacements: [
+            "hours": String(minutes / 60),
+            "minutes": String(minutes % 60)
+        ])
+    }
+
+    private func applyLocalization(_ nextLocalization: AppLocalization) {
+        localization = nextLocalization
+        resolvedLanguage = nextLocalization.resolvedLanguage
+    }
+
     var settingsWarnings: [SettingsWarningItem] {
         var warnings: [SettingsWarningItem] = []
         if !isRuleRegistryWritable {
             warnings.append(SettingsWarningItem(
                 id: .unreadableRuleRegistry,
-                message: SettingsWarningText.readOnlyRegistry,
+                message: localized(.warningRuleRegistryNewerReadOnly),
                 showsLoginItemsSettingsButton: false
             ))
         }
-        if let rulePersistenceWarningMessage {
+        if let rulePersistenceWarningKey {
             warnings.append(SettingsWarningItem(
                 id: .rulePersistence,
-                message: rulePersistenceWarningMessage,
+                message: localized(rulePersistenceWarningKey),
                 showsLoginItemsSettingsButton: false
             ))
         }
-        if let loginItemWarningMessage {
+        if let loginItemWarningKey {
             warnings.append(SettingsWarningItem(
                 id: .loginItem,
-                message: loginItemWarningMessage,
+                message: localized(loginItemWarningKey),
                 showsLoginItemsSettingsButton:
                     SMAppService.mainApp.status == .requiresApproval
             ))
@@ -527,13 +604,13 @@ final class AppModel: ObservableObject {
         let runtimeID = item.id
 
         if forceQuitOperationTokens[runtimeID] != nil {
-            return AppAutomationStatus(text: "正在强制退出…")
+            return AppAutomationStatus(text: localized(.statusForceQuitInProgress))
         }
         if forceQuitFailures.contains(runtimeID) {
             return AppAutomationStatus(
-                text: "强制退出失败",
+                text: localized(.statusForceQuitFailed),
                 isError: true,
-                helpText: "App 仍在运行，请使用 macOS 的“强制退出”窗口或活动监视器处理"
+                helpText: localized(.statusForceQuitFailedHelp)
             )
         }
         if let quitRequest = quitRequestStates[runtimeID] {
@@ -543,14 +620,14 @@ final class AppModel: ObservableObject {
             ) {
             case .waiting:
                 return AppAutomationStatus(
-                    text: "正在退出…",
-                    helpText: "正常退出请求已发送，正在等待 App 响应"
+                    text: localized(.statusQuitInProgress),
+                    helpText: localized(.statusQuitWaitingHelp)
                 )
             case .timedOut:
                 return AppAutomationStatus(
-                    text: "退出未完成",
+                    text: localized(.statusQuitNotCompleted),
                     isWarning: true,
-                    helpText: "App 仍在运行，可能正在等待保存或确认；右击可重试或强制退出"
+                    helpText: localized(.statusQuitNotCompletedHelp)
                 )
             }
         }
@@ -559,11 +636,14 @@ final class AppModel: ObservableObject {
             switch oneShotAction {
             case .hide:
                 return AppAutomationStatus(
-                    text: item.isHidden ? "已隐藏" : "正在隐藏…",
+                    text: localized(item.isHidden ? .statusHideHidden : .statusHideInProgress),
                     isError: false
                 )
             case .quit:
-                return AppAutomationStatus(text: "已请求退出 · 等待 App 响应", isError: false)
+                return AppAutomationStatus(
+                    text: localized(.statusQuitRequestedWaiting),
+                    isError: false
+                )
             case .unset, .ignore:
                 break
             }
@@ -573,21 +653,30 @@ final class AppModel: ObservableObject {
         guard action.isAutomated else { return nil }
 
         if let failedAction = actionFailures[runtimeID] {
-            let retryText = retryStates[runtimeID]?.hasAttemptsRemaining == true ? " · 稍后重试" : " · 请手动重试"
-            return AppAutomationStatus(text: "\(failedAction.title)失败\(retryText)", isError: true)
+            let key: L10n.Key = retryStates[runtimeID]?.hasAttemptsRemaining == true
+                ? .statusActionFailedRetry
+                : .statusActionFailedManual
+            return AppAutomationStatus(
+                text: localized(key, replacements: [
+                    "action": actionTitle(for: failedAction)
+                ]),
+                isError: true
+            )
         }
         if action == .hide, item.isHidden {
-            return AppAutomationStatus(text: "已隐藏", isError: false)
+            return AppAutomationStatus(text: localized(.statusHideHidden), isError: false)
         }
         if alreadyHandled.contains(runtimeID) {
-            let text = action == .quit ? "已请求退出 · 等待 App 响应" : "正在\(action.title)…"
+            let text = action == .quit
+                ? localized(.statusQuitRequestedWaiting)
+                : localized(.statusHideInProgress)
             return AppAutomationStatus(text: text, isError: false)
         }
         if item.isActive {
-            return AppAutomationStatus(text: "使用中 · 离开后计时", isError: false)
+            return AppAutomationStatus(text: localized(.statusActive), isError: false)
         }
         guard let inactiveAt = inactiveSince[runtimeID] else {
-            return AppAutomationStatus(text: "等待离开前台", isError: false)
+            return AppAutomationStatus(text: localized(.statusWaitingForBackground), isError: false)
         }
 
         let elapsed = effectiveNow - inactiveAt
@@ -601,26 +690,47 @@ final class AppModel: ObservableObject {
 
             if item.isHidden || preHideState?.stage == .completed {
                 if quitRemaining <= 0 {
-                    return AppAutomationStatus(text: "即将退出", isError: false)
+                    return AppAutomationStatus(
+                        text: localized(.statusActionAboutToRun, replacements: [
+                            "action": actionTitle(for: .quit)
+                        ]),
+                        isError: false
+                    )
                 }
                 let formatted = formatRemainingTime(quitRemaining)
                 return AppAutomationStatus(
-                    text: automationEnabled ? "已隐藏 · 还剩 \(formatted)" : "已暂停 · 剩余 \(formatted)",
+                    text: localized(
+                        automationEnabled
+                            ? .statusHideHiddenRemaining
+                            : .statusAutomationPausedRemaining,
+                        replacements: ["time": formatted]
+                    ),
                     isError: false
                 )
             }
             if preHideState?.stage == .inFlight {
-                return AppAutomationStatus(text: "正在隐藏…", isError: false)
+                return AppAutomationStatus(text: localized(.statusHideInProgress), isError: false)
             }
             if let preHideState, preHideState.retryState.failureCount > 0 {
-                return AppAutomationStatus(text: "隐藏失败 · 仍将退出", isError: true)
+                return AppAutomationStatus(
+                    text: localized(.statusHideFailedWillQuit),
+                    isError: true
+                )
             }
 
             let hideRemaining = preQuitHideDelaySeconds - elapsed
             if hideRemaining > 0 {
                 let formatted = formatRemainingTime(hideRemaining)
                 return AppAutomationStatus(
-                    text: automationEnabled ? "还剩 \(formatted) · 将隐藏" : "已暂停 · 剩余 \(formatted)",
+                    text: localized(
+                        automationEnabled
+                            ? .statusActionRemaining
+                            : .statusAutomationPausedRemaining,
+                        replacements: [
+                            "time": formatted,
+                            "action": actionTitle(for: .hide)
+                        ]
+                    ),
                     isError: false
                 )
             }
@@ -628,14 +738,30 @@ final class AppModel: ObservableObject {
 
         let remaining = actionDelay - elapsed
         if remaining <= 0 {
-            return AppAutomationStatus(text: "即将\(action.title)", isError: false)
+            return AppAutomationStatus(
+                text: localized(.statusActionAboutToRun, replacements: [
+                    "action": actionTitle(for: action)
+                ]),
+                isError: false
+            )
         }
 
         let formatted = formatRemainingTime(remaining)
         if !automationEnabled {
-            return AppAutomationStatus(text: "已暂停 · 剩余 \(formatted)", isError: false)
+            return AppAutomationStatus(
+                text: localized(.statusAutomationPausedRemaining, replacements: [
+                    "time": formatted
+                ]),
+                isError: false
+            )
         }
-        return AppAutomationStatus(text: "还剩 \(formatted) · 将\(action.title)", isError: false)
+        return AppAutomationStatus(
+            text: localized(.statusActionRemaining, replacements: [
+                "time": formatted,
+                "action": actionTitle(for: action)
+            ]),
+            isError: false
+        )
     }
 
     func immediateTargetCount(for action: AutoAction) -> Int {
@@ -645,11 +771,17 @@ final class AppModel: ObservableObject {
 
     func immediateTargetHelp(for action: AutoAction) -> String {
         guard isRuleRegistryWritable else {
-            return "规则来自更高版本，当前版本无法解析，不能执行依赖规则的批量操作"
+            return localized(.helpRuleRegistryBatchUnavailable)
         }
         let names = immediateTargets(for: action).map(\.name)
-        guard !names.isEmpty else { return "没有可立即\(action.title)的 App" }
-        return "立即\(action.title)：\(names.joined(separator: "、"))"
+        let actionName = actionTitle(for: action)
+        guard !names.isEmpty else {
+            return localized(.helpImmediateNoTargets, replacements: ["action": actionName])
+        }
+        return localized(.helpImmediateTargets, replacements: [
+            "action": actionName,
+            "names": localizedList(names)
+        ])
     }
 
     func performConfiguredApps(_ action: AutoAction) {
@@ -1148,11 +1280,11 @@ final class AppModel: ObservableObject {
                 defaults.set(currentData, forKey: Keys.ruleRegistryBackup)
             }
             defaults.set(encoded, forKey: Keys.ruleRegistry)
-            rulePersistenceWarningMessage = nil
+            rulePersistenceWarningKey = nil
         } catch {
             Self.logger.error("Failed to persist rule registry: \(error.localizedDescription, privacy: .public)")
             statusMessage = "保存规则失败"
-            rulePersistenceWarningMessage = SettingsWarningText.saveRulesFailed
+            rulePersistenceWarningKey = .warningRuleRegistrySaveFailed
         }
     }
 
@@ -1171,26 +1303,26 @@ final class AppModel: ObservableObject {
             case .requiresApproval:
                 if enabled {
                     refreshLoginStatus()
-                    statusMessage = SettingsWarningText.loginItemRequiresApproval
+                    statusMessage = localized(.warningLoginItemRequiresApproval)
                     return
                 }
                 try service.unregister()
             case .notFound:
                 refreshLoginStatus()
-                statusMessage = SettingsWarningText.loginItemNotFound
+                statusMessage = localized(.warningLoginItemNotFound)
                 return
             @unknown default:
                 refreshLoginStatus()
-                loginItemWarningMessage = SettingsWarningText.loginItemFailed
-                statusMessage = SettingsWarningText.loginItemFailed
+                loginItemWarningKey = .warningLoginItemFailed
+                statusMessage = localized(.warningLoginItemFailed)
                 return
             }
             refreshLoginStatus()
             statusMessage = launchAtLogin ? "已设置登录时启动" : "已取消登录时启动"
         } catch {
             refreshLoginStatus()
-            statusMessage = SettingsWarningText.loginItemFailed
-            loginItemWarningMessage = SettingsWarningText.loginItemFailed
+            statusMessage = localized(.warningLoginItemFailed)
+            loginItemWarningKey = .warningLoginItemFailed
         }
     }
 
@@ -1199,6 +1331,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshSettingsStatus() {
+        refreshSystemLanguageIfNeeded()
         refreshLoginStatus()
     }
 
@@ -1757,19 +1890,19 @@ final class AppModel: ObservableObject {
         switch SMAppService.mainApp.status {
         case .enabled:
             launchAtLogin = true
-            loginItemWarningMessage = nil
+            loginItemWarningKey = nil
         case .notRegistered:
             launchAtLogin = false
-            loginItemWarningMessage = nil
+            loginItemWarningKey = nil
         case .requiresApproval:
             launchAtLogin = false
-            loginItemWarningMessage = SettingsWarningText.loginItemRequiresApproval
+            loginItemWarningKey = .warningLoginItemRequiresApproval
         case .notFound:
             launchAtLogin = false
-            loginItemWarningMessage = SettingsWarningText.loginItemNotFound
+            loginItemWarningKey = .warningLoginItemNotFound
         @unknown default:
             launchAtLogin = false
-            loginItemWarningMessage = SettingsWarningText.loginItemFailed
+            loginItemWarningKey = .warningLoginItemFailed
         }
     }
 
@@ -1961,22 +2094,32 @@ struct AppRow: View {
         let targetCount = model.immediateTargetCount(for: action, in: item)
         guard item.runningInstances.count > 1 else {
             if action == .hide, targetCount == 0 {
-                return "立即隐藏（已隐藏）"
+                return model.localized(.contextHideAlreadyHidden)
             }
-            return "立即\(action.title)"
+            return model.localized(.contextActionImmediate, replacements: [
+                "action": model.actionTitle(for: action)
+            ])
         }
 
         if action == .hide {
             return targetCount == 0
-                ? "立即隐藏（已全部隐藏）"
-                : "立即隐藏（\(targetCount) 个可见实例）"
+                ? model.localized(.contextHideAllHidden)
+                : model.localized(.contextHideVisibleInstances, replacements: [
+                    "count": String(targetCount)
+                ])
         }
-        return "立即退出（全部 \(targetCount) 个实例）"
+        return model.localized(.contextQuitAllInstances, replacements: [
+            "count": String(targetCount)
+        ])
     }
 
     private var forceQuitMenuTitle: String {
-        guard item.runningInstances.count > 1 else { return "强制退出…" }
-        return "强制退出全部 \(item.runningInstances.count) 个实例…"
+        guard item.runningInstances.count > 1 else {
+            return model.localized(.contextForceQuit)
+        }
+        return model.localized(.contextForceQuitAllInstances, replacements: [
+            "count": String(item.runningInstances.count)
+        ])
     }
 
     private var displayStatus: AppAutomationStatus? {
@@ -1985,7 +2128,11 @@ struct AppRow: View {
             if let errorStatus = statuses.first(where: \.isError) {
                 let errorCount = statuses.filter(\.isError).count
                 return AppAutomationStatus(
-                    text: "\(item.runningInstances.count) 个运行实例 · \(errorCount) 个\(errorStatus.text)",
+                    text: model.localized(.statusInstancesErrorSummary, replacements: [
+                        "count": String(item.runningInstances.count),
+                        "errorCount": String(errorCount),
+                        "status": errorStatus.text
+                    ]),
                     isError: true,
                     helpText: errorStatus.helpText
                 )
@@ -1993,22 +2140,32 @@ struct AppRow: View {
             let warningCount = statuses.filter(\.isWarning).count
             if warningCount > 0 {
                 return AppAutomationStatus(
-                    text: "\(item.runningInstances.count) 个运行实例 · \(warningCount) 个退出未完成",
+                    text: model.localized(.statusInstancesQuitNotCompleted, replacements: [
+                        "count": String(item.runningInstances.count),
+                        "warningCount": String(warningCount)
+                    ]),
                     isWarning: true,
-                    helpText: "仍在运行的实例可能正在等待保存或确认；右击可重试或强制退出"
+                    helpText: model.localized(.statusInstancesQuitNotCompletedHelp)
                 )
             }
             if statuses.count == item.runningInstances.count,
                let firstStatus = statuses.first,
-               statuses.allSatisfy({ $0.text == firstStatus.text }) {
+                statuses.allSatisfy({ $0.text == firstStatus.text }) {
                 return AppAutomationStatus(
-                    text: "\(item.runningInstances.count) 个运行实例 · \(firstStatus.text)",
+                    text: model.localized(.statusInstancesSameStatus, replacements: [
+                        "count": String(item.runningInstances.count),
+                        "status": firstStatus.text
+                    ]),
                     helpText: firstStatus.helpText
                 )
             }
-            let pausePrefix = !model.automationEnabled && effectiveAction.isAutomated ? "已暂停 · " : ""
             return AppAutomationStatus(
-                text: "\(pausePrefix)\(item.runningInstances.count) 个运行实例 · 分别计时",
+                text: model.localized(
+                    !model.automationEnabled && effectiveAction.isAutomated
+                        ? .statusInstancesPausedSeparateTimers
+                        : .statusInstancesSeparateTimers,
+                    replacements: ["count": String(item.runningInstances.count)]
+                ),
                 isError: false
             )
         }
@@ -2016,7 +2173,9 @@ struct AppRow: View {
             return model.automationStatus(for: runningItem)
         }
         return AppAutomationStatus(
-            text: item.isInstalled ? "未运行" : "未找到 App",
+            text: model.localized(
+                item.isInstalled ? .rowStatusNotRunning : .rowStatusAppNotFound
+            ),
             isError: false
         )
     }
@@ -2049,13 +2208,13 @@ struct AppRow: View {
 
             Spacer(minLength: 8)
 
-            Picker("规则", selection: Binding(
+            Picker(model.localized(.rowRuleLabel), selection: Binding(
                 get: { explicitAction },
                 set: { model.setPolicy($0, for: item.bundleIdentifier) }
             )) {
                 ForEach(AutoAction.rulePickerOrder, id: \.self) { option in
                     Label {
-                        Text(option.rulePickerTitle)
+                        Text(model.rulePickerTitle(for: option))
                     } icon: {
                         Image(systemName: option.symbol)
                             .symbolRenderingMode(.palette)
@@ -2067,32 +2226,36 @@ struct AppRow: View {
             .labelsHidden()
             .frame(width: 116)
             .disabled(!model.rulesAreEditable)
-            .help("修改 \(item.name) 的规则")
-            .accessibilityLabel("\(item.name) 的规则")
+            .help(model.localized(.rowRuleHelp, replacements: ["name": item.name]))
+            .accessibilityLabel(model.localized(.a11yRuleForApp, replacements: [
+                "name": item.name
+            ]))
 
             Group {
                 if explicitAction == .unset, effectiveAction == .hide {
-                    Text(durationTitle(model.defaultHideMinutes))
+                    Text(model.durationTitle(model.defaultHideMinutes))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
-                        .help("继承默认隐藏时间")
+                        .help(model.localized(.rowDelayInherited))
                 } else if !explicitAction.isAutomated {
                     Text("—")
                         .foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity)
-                        .accessibilityLabel("未设置等待时间")
+                        .accessibilityLabel(model.localized(.a11yDelayNotSet))
                 } else {
-                    Picker("等待时间", selection: Binding(
+                    Picker(model.localized(.rowDelayLabel), selection: Binding(
                         get: { model.idleMinutes(for: item.bundleIdentifier) },
                         set: { model.setIdleMinutes($0, for: item.bundleIdentifier) }
                     )) {
                         ForEach(minuteOptions, id: \.self) { minutes in
-                            Text(durationTitle(minutes)).tag(minutes)
+                            Text(model.durationTitle(minutes)).tag(minutes)
                         }
                     }
                     .labelsHidden()
-                    .help("离开前台多久后处理")
-                    .accessibilityLabel("\(item.name) 的等待时间")
+                    .help(model.localized(.rowDelayHelp))
+                    .accessibilityLabel(model.localized(.a11yDelayForApp, replacements: [
+                        "name": item.name
+                    ]))
                     .disabled(!model.rulesAreEditable)
                 }
             }
@@ -2108,7 +2271,10 @@ struct AppRow: View {
                     Label(immediateMenuTitle(for: .hide), systemImage: AutoAction.hide.symbol)
                 }
                 .disabled(model.immediateTargetCount(for: .hide, in: item) == 0)
-                .accessibilityLabel("\(immediateMenuTitle(for: .hide))，\(item.name)")
+                .accessibilityLabel(model.localized(.a11yActionForApp, replacements: [
+                    "action": immediateMenuTitle(for: .hide),
+                    "name": item.name
+                ]))
 
                 Divider()
 
@@ -2118,7 +2284,10 @@ struct AppRow: View {
                     Label(immediateMenuTitle(for: .quit), systemImage: AutoAction.quit.symbol)
                 }
                 .disabled(model.immediateTargetCount(for: .quit, in: item) == 0)
-                .accessibilityLabel("\(immediateMenuTitle(for: .quit))，\(item.name)")
+                .accessibilityLabel(model.localized(.a11yActionForApp, replacements: [
+                    "action": immediateMenuTitle(for: .quit),
+                    "name": item.name
+                ]))
 
                 Divider()
 
@@ -2128,16 +2297,12 @@ struct AppRow: View {
                     Label(forceQuitMenuTitle, systemImage: "exclamationmark.octagon")
                 }
                 .disabled(model.immediateTargetCount(for: .quit, in: item) == 0)
-                .accessibilityLabel("\(forceQuitMenuTitle)，\(item.name)")
+                .accessibilityLabel(model.localized(.a11yActionForApp, replacements: [
+                    "action": forceQuitMenuTitle,
+                    "name": item.name
+                ]))
             }
         }
-    }
-
-    private func durationTitle(_ minutes: Int) -> String {
-        if minutes < 60 { return "\(minutes) 分钟" }
-        if minutes.isMultiple(of: 1_440) { return "\(minutes / 1_440) 天" }
-        if minutes.isMultiple(of: 60) { return "\(minutes / 60) 小时" }
-        return "\(minutes / 60)时\(minutes % 60)分"
     }
 
     private func ruleIconTint(for action: AutoAction) -> Color {
@@ -2155,7 +2320,7 @@ struct SettingsSheet: View {
 
     private var versionText: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        return "版本 \(version)"
+        return model.localized(.settingsAboutVersion, replacements: ["version": version])
     }
 
     private var defaultMinuteOptions: [Int] {
@@ -2170,8 +2335,46 @@ struct SettingsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("QuitHide 设置")
+            Text(model.localized(.settingsTitle))
                 .font(.title2.bold())
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 12) {
+                    Text(model.localized(.settingsLoginLaunch))
+                        .font(.callout.weight(.medium))
+                        .accessibilityHidden(true)
+
+                    Spacer(minLength: 12)
+
+                    Toggle(model.localized(.settingsLoginLaunch), isOn: Binding(
+                        get: { model.launchAtLogin },
+                        set: { model.setLaunchAtLogin($0) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                }
+
+                HStack(spacing: 12) {
+                    Text(model.localized(.languagePickerLabel))
+                        .font(.callout.weight(.medium))
+                        .accessibilityHidden(true)
+
+                    Spacer(minLength: 12)
+
+                    Picker(model.localized(.languagePickerLabel), selection: Binding(
+                        get: { model.languagePreference },
+                        set: { model.setLanguagePreference($0) }
+                    )) {
+                        ForEach(AppLanguagePreference.allCases) { preference in
+                            Text(model.localized(preference.labelKey)).tag(preference)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 100)
+                }
+            }
 
             ForEach(model.settingsWarnings) { warning in
                 VStack(alignment: .leading, spacing: 8) {
@@ -2184,7 +2387,7 @@ struct SettingsSheet: View {
                     }
 
                     if warning.showsLoginItemsSettingsButton {
-                        Button("打开登录项设置") {
+                        Button(model.localized(.settingsLoginOpen)) {
                             model.openLoginItemsSettings()
                         }
                         .controlSize(.small)
@@ -2206,19 +2409,14 @@ struct SettingsSheet: View {
                 .accessibilityElement(children: .contain)
             }
 
-            Toggle("登录时启动", isOn: Binding(
-                get: { model.launchAtLogin },
-                set: { model.setLaunchAtLogin($0) }
-            ))
-
             Divider()
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("附加规则")
+                Text(model.localized(.settingsAdditionalRulesTitle))
                     .font(.headline)
 
                 HStack(spacing: 10) {
-                    Toggle("未设置规则的 App 自动隐藏", isOn: Binding(
+                    Toggle(model.localized(.settingsDefaultHideEnabled), isOn: Binding(
                         get: { model.defaultHideEnabled },
                         set: { model.setDefaultHideEnabled($0) }
                     ))
@@ -2227,29 +2425,31 @@ struct SettingsSheet: View {
                     .controlSize(.small)
                     .disabled(!model.rulesAreEditable)
 
-                    Text("未设置规则的 App 自动隐藏")
+                    Text(model.localized(.settingsDefaultHideEnabled))
                         .font(.callout.weight(.medium))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: 6)
 
                     if model.defaultHideEnabled {
-                        Picker("默认隐藏时间", selection: Binding(
+                        Picker(model.localized(.settingsDefaultHideDelay), selection: Binding(
                             get: { model.defaultHideMinutes },
                             set: { model.setDefaultHideMinutes($0) }
                         )) {
                             ForEach(defaultMinuteOptions, id: \.self) { minutes in
-                                Text(durationTitle(minutes)).tag(minutes)
+                                Text(model.durationTitle(minutes)).tag(minutes)
                             }
                         }
                         .labelsHidden()
                         .frame(width: 90)
-                        .help("未单独设置规则的 App 离开前台多久后隐藏")
+                        .help(model.localized(.settingsDefaultHideHelp))
                         .disabled(!model.rulesAreEditable)
                     }
                 }
 
                 HStack(spacing: 10) {
-                    Toggle("自动退出的 App 退出前先自动隐藏", isOn: Binding(
+                    Toggle(model.localized(.settingsPreQuitHideEnabled), isOn: Binding(
                         get: { model.preQuitHideEnabled },
                         set: { model.setPreQuitHideEnabled($0) }
                     ))
@@ -2258,23 +2458,25 @@ struct SettingsSheet: View {
                     .controlSize(.small)
                     .disabled(!model.rulesAreEditable)
 
-                    Text("自动退出的 App 退出前先自动隐藏")
+                    Text(model.localized(.settingsPreQuitHideEnabled))
                         .font(.callout.weight(.medium))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: 6)
 
                     if model.preQuitHideEnabled {
-                        Picker("预先隐藏时间", selection: Binding(
+                        Picker(model.localized(.settingsPreQuitHideDelay), selection: Binding(
                             get: { model.preQuitHideMinutes },
                             set: { model.setPreQuitHideMinutes($0) }
                         )) {
                             ForEach(preQuitHideMinuteOptions, id: \.self) { minutes in
-                                Text(durationTitle(minutes)).tag(minutes)
+                                Text(model.durationTitle(minutes)).tag(minutes)
                             }
                         }
                         .labelsHidden()
                         .frame(width: 90)
-                        .help("自动退出的 App 离开前台多久后先隐藏")
+                        .help(model.localized(.settingsPreQuitHideHelp))
                         .disabled(!model.rulesAreEditable)
                     }
                 }
@@ -2283,23 +2485,26 @@ struct SettingsSheet: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("关于 QuitHide")
+                Text(model.localized(.settingsAboutTitle))
                     .font(.headline)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("作者：江sir爱数码")
-                    Text("有问题可以加江sir微信进行反馈：jsasm1")
+                    Text(model.localized(.settingsAboutAuthor))
+                    Text(model.localized(.settingsAboutFeedback))
                         .textSelection(.enabled)
                     Text(versionText)
                         .foregroundStyle(.secondary)
-                    Label("正式发布包使用 Developer ID 签名并通过 Apple 公证", systemImage: "checkmark.shield")
+                    Label(
+                        model.localized(.settingsAboutNotarized),
+                        systemImage: "checkmark.shield"
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .font(.callout)
 
                 HStack(spacing: 12) {
-                    Toggle("自动检查更新", isOn: Binding(
+                    Toggle(model.localized(.settingsUpdateAutomatic), isOn: Binding(
                         get: { model.automaticUpdateChecksEnabled },
                         set: { model.setAutomaticUpdateChecksEnabled($0) }
                     ))
@@ -2340,7 +2545,7 @@ struct SettingsSheet: View {
                 }
 
                 Link(
-                    "GitHub 项目",
+                    model.localized(.settingsGitHubProject),
                     destination: URL(string: "https://github.com/jiangsir-tech/QuitHide")!
                 )
                 .font(.caption)
@@ -2349,6 +2554,11 @@ struct SettingsSheet: View {
         }
         .padding(24)
         .frame(width: 410)
+        .environment(\.locale, model.effectiveLocale)
+        .background {
+            SettingsWindowConfigurator(title: model.localized(.settingsTitle))
+                .frame(width: 0, height: 0)
+        }
         .onAppear {
             model.refreshSettingsStatus()
         }
@@ -2358,15 +2568,11 @@ struct SettingsSheet: View {
         model.updateCheckInProgress
     }
 
-    private func durationTitle(_ minutes: Int) -> String {
-        if minutes < 60 { return "\(minutes) 分钟" }
-        if minutes.isMultiple(of: 60) { return "\(minutes / 60) 小时" }
-        return "\(minutes / 60)时\(minutes % 60)分"
-    }
-
     private var updateButtonTitle: String {
-        if case .available = model.updateState { return "前往下载" }
-        return isChecking ? "正在检查…" : "检查更新"
+        if case .available = model.updateState {
+            return model.localized(.updateActionDownload)
+        }
+        return model.localized(isChecking ? .updateStatusChecking : .updateActionCheck)
     }
 
     private var updateStatusText: String? {
@@ -2374,11 +2580,13 @@ struct SettingsSheet: View {
         case .idle, .checking:
             return nil
         case .upToDate:
-            return "当前已是最新版本"
+            return model.localized(.updateStatusUpToDate)
         case let .available(update):
-            return "发现新版本 \(update.version)"
+            return model.localized(.updateStatusAvailable, replacements: [
+                "version": update.version
+            ])
         case .failed:
-            return "检查失败，请稍后重试"
+            return model.localized(.updateStatusFailed)
         }
     }
 
@@ -2414,6 +2622,43 @@ struct SettingsSheet: View {
             return
         }
         model.checkForUpdatesManually()
+    }
+}
+
+private final class SettingsWindowTrackingView: NSView {
+    var configureWindow: ((NSWindow) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window {
+            configureWindow?(window)
+        }
+    }
+}
+
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    let title: String
+
+    func makeNSView(context: Context) -> SettingsWindowTrackingView {
+        let view = SettingsWindowTrackingView(frame: .zero)
+        view.configureWindow = { window in
+            Self.configure(window, title: title)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: SettingsWindowTrackingView, context: Context) {
+        nsView.configureWindow = { window in
+            Self.configure(window, title: title)
+        }
+        if let window = nsView.window {
+            Self.configure(window, title: title)
+        }
+    }
+
+    private static func configure(_ window: NSWindow, title: String) {
+        window.identifier = NSUserInterfaceItemIdentifier("QuitHide.Settings")
+        window.title = title
     }
 }
 
@@ -2559,13 +2804,13 @@ struct MenuContentView: View {
         case autoQuit
         case searchResults
 
-        var title: String {
+        var titleKey: L10n.Key {
             switch self {
-            case .ignored: return "不处理"
-            case .unconfigured: return "未设置"
-            case .autoHide: return "自动隐藏"
-            case .autoQuit: return "自动退出"
-            case .searchResults: return "搜索结果"
+            case .ignored: return .menuSectionIgnore
+            case .unconfigured: return .menuSectionUnconfigured
+            case .autoHide: return .menuSectionAutomaticHide
+            case .autoQuit: return .menuSectionAutomaticQuit
+            case .searchResults: return .menuSectionSearchResults
             }
         }
     }
@@ -2657,7 +2902,7 @@ struct MenuContentView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("QuitHide")
                         .font(.system(size: 20, weight: .semibold))
-                    Text("自动隐藏或退出不需要的 App")
+                    Text(model.localized(.menuSubtitle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2667,7 +2912,11 @@ struct MenuContentView: View {
                     Circle()
                         .fill(model.automationEnabled ? Color.green : Color.orange)
                         .frame(width: 7, height: 7)
-                    Text(model.automationEnabled ? "自动处理已开启" : "自动处理已暂停")
+                    Text(model.localized(
+                        model.automationEnabled
+                            ? .menuAutomationEnabled
+                            : .menuAutomationPaused
+                    ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -2688,7 +2937,16 @@ struct MenuContentView: View {
                 }
                 .buttonStyle(.plain)
                 .suppressFocusEffect()
-                .help(model.automationEnabled ? "暂停自动处理" : "继续自动处理")
+                .help(model.localized(
+                    model.automationEnabled
+                        ? .menuAutomationPause
+                        : .menuAutomationResume
+                ))
+                .accessibilityLabel(model.localized(
+                    model.automationEnabled
+                        ? .a11yAutomationPause
+                        : .a11yAutomationResume
+                ))
                 .disabled(!model.rulesAreEditable)
 
                 Button {
@@ -2701,19 +2959,20 @@ struct MenuContentView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("设置")
+                .help(model.localized(.menuSettings))
+                .accessibilityLabel(model.localized(.a11ySettings))
             }
             .padding(16)
 
             HStack(spacing: 4) {
                 scopeButton(
                     .running,
-                    title: "运行中",
+                    title: model.localized(.menuScopeRunning),
                     count: model.runningAppCount
                 )
                 scopeButton(
                     .allRules,
-                    title: "全部规则",
+                    title: model.localized(.menuScopeAllRules),
                     count: model.explicitRuleCount
                 )
                 Spacer(minLength: 8)
@@ -2728,11 +2987,15 @@ struct MenuContentView: View {
                     }
                     .buttonStyle(.plain)
                     .keyboardShortcut("f", modifiers: .command)
-                    .help("搜索（⌘F）")
-                    .accessibilityLabel("聚焦搜索")
+                    .help(model.localized(.menuSearchShortcut))
+                    .accessibilityLabel(model.localized(.a11ySearchFocus))
 
                     TextField(
-                        catalogScope == .running ? "搜索运行中的 App" : "搜索已保存规则",
+                        model.localized(
+                            catalogScope == .running
+                                ? .menuSearchRunningPlaceholder
+                                : .menuSearchRulesPlaceholder
+                        ),
                         text: $model.searchText
                     )
                         .textFieldStyle(.plain)
@@ -2752,8 +3015,8 @@ struct MenuContentView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help("清除搜索")
-                        .accessibilityLabel("清除搜索")
+                        .help(model.localized(.menuSearchClear))
+                        .accessibilityLabel(model.localized(.a11ySearchClear))
                     }
                 }
                 .padding(.horizontal, 8)
@@ -2775,25 +3038,27 @@ struct MenuContentView: View {
                     HStack(spacing: 7) {
                         Image(systemName: "arrow.up.circle.fill")
                             .foregroundStyle(.blue)
-                        Text("发现新版本 \(update.version)")
+                        Text(model.localized(.menuUpdateAvailable, replacements: [
+                            "version": update.version
+                        ]))
                             .font(.callout.weight(.semibold))
                         Spacer(minLength: 0)
                     }
 
                     HStack(spacing: 8) {
-                        Button("前往下载") {
+                        Button(model.localized(.menuUpdateDownload)) {
                             model.openAvailableUpdate(update)
                         }
                         .buttonStyle(.borderedProminent)
 
-                        Button("稍后提醒") {
+                        Button(model.localized(.menuUpdateLater)) {
                             model.remindAboutUpdateLater(update)
                         }
                         .buttonStyle(.bordered)
 
                         Spacer(minLength: 0)
 
-                        Button("跳过此版本") {
+                        Button(model.localized(.menuUpdateSkip)) {
                             model.skipUpdateVersion(update)
                         }
                         .buttonStyle(.plain)
@@ -2831,7 +3096,7 @@ struct MenuContentView: View {
                     if !isSearching,
                        catalogScope == .running,
                        model.explicitRuleCount > 0 {
-                        Button("查看全部规则") {
+                        Button(model.localized(.menuViewAllRules)) {
                             selectScope(.allRules)
                         }
                         .buttonStyle(.link)
@@ -2898,7 +3163,7 @@ struct MenuContentView: View {
                 VStack(spacing: 8) {
                     if !isSearching {
                         HStack {
-                            Text("提前执行")
+                            Text(model.localized(.menuBatchHeading))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -2910,7 +3175,9 @@ struct MenuContentView: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     ActionSymbol(action: .hide)
-                                    Text("立即隐藏（\(model.immediateTargetCount(for: .hide))）")
+                                    Text(model.localized(.menuBatchHide, replacements: [
+                                        "count": String(model.immediateTargetCount(for: .hide))
+                                    ]))
                                         .foregroundStyle(.primary)
                                 }
                                     .frame(maxWidth: .infinity)
@@ -2924,7 +3191,9 @@ struct MenuContentView: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     ActionSymbol(action: .quit)
-                                    Text("立即退出（\(model.immediateTargetCount(for: .quit))）")
+                                    Text(model.localized(.menuBatchQuit, replacements: [
+                                        "count": String(model.immediateTargetCount(for: .quit))
+                                    ]))
                                         .foregroundStyle(.primary)
                                 }
                                     .frame(maxWidth: .infinity)
@@ -2936,7 +3205,7 @@ struct MenuContentView: View {
                     }
 
                     HStack(spacing: 8) {
-                        Text("单个 App 上右击也可以立即隐藏或退出")
+                        Text(model.localized(.menuRowActionHint))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -2944,13 +3213,13 @@ struct MenuContentView: View {
 
                         Spacer(minLength: 8)
 
-                        Button("退出 QuitHide") {
+                        Button(model.localized(.menuQuitApp)) {
                             NSApp.terminate(nil)
                         }
                         .buttonStyle(.plain)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .help("退出 QuitHide")
+                        .help(model.localized(.menuQuitApp))
                     }
                 }
                 .padding(12)
@@ -2958,19 +3227,22 @@ struct MenuContentView: View {
         }
         .frame(width: 410, height: menuHeight, alignment: .top)
         .background(Color(nsColor: .windowBackgroundColor).opacity(0.92))
+        .environment(\.locale, model.effectiveLocale)
         .animation(.easeOut(duration: 0.18), value: model.pendingUpdatePrompt)
         .alert(item: $pendingForceQuitRequest) { request in
             Alert(
-                title: Text("强制退出“\(request.appName)”？"),
-                message: Text("将立即结束本次选择中仍在运行的实例，且不会等待 App 保存或确认；未保存的内容可能会丢失。"),
-                primaryButton: .destructive(Text("强制退出")) {
+                title: Text(model.localized(.dialogForceQuitTitle, replacements: [
+                    "name": request.appName
+                ])),
+                message: Text(model.localized(.dialogForceQuitMessage)),
+                primaryButton: .destructive(Text(model.localized(.dialogForceQuitConfirm))) {
                     pendingForceQuitRequest = nil
                     model.forceQuitImmediately(
                         named: request.appName,
                         requestedTargets: request.requestedTargets
                     )
                 },
-                secondaryButton: .cancel(Text("取消")) {
+                secondaryButton: .cancel(Text(model.localized(.dialogCancel))) {
                     pendingForceQuitRequest = nil
                 }
             )
@@ -3005,6 +3277,7 @@ struct MenuContentView: View {
         catalogScope = .running
         model.searchText = ""
         isSearchFocused = false
+        model.refreshSystemLanguageIfNeeded()
         if refreshApps {
             model.refreshApps()
             model.prepareUpdatePromptForMenuPresentation()
@@ -3012,12 +3285,12 @@ struct MenuContentView: View {
     }
 
     private var emptyStateTitle: String {
-        if isSearching { return "没有匹配的 App" }
+        if isSearching { return model.localized(.menuEmptySearch) }
         switch catalogScope {
         case .running:
-            return "当前没有正在运行的 App"
+            return model.localized(.menuEmptyRunning)
         case .allRules:
-            return "还没有已保存规则"
+            return model.localized(.menuEmptyRules)
         }
     }
 
@@ -3030,7 +3303,10 @@ struct MenuContentView: View {
         return Button {
             selectScope(scope)
         } label: {
-            Text("\(title) \(count)")
+            Text(model.localized(.menuScopeCount, replacements: [
+                "title": title,
+                "count": String(count)
+            ]))
                 .font(.caption.weight(isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                 .padding(.horizontal, 10)
@@ -3042,7 +3318,10 @@ struct MenuContentView: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(title)，\(count) 个 App")
+        .accessibilityLabel(model.localized(.a11yScopeAppCount, replacements: [
+            "title": title,
+            "count": String(count)
+        ]))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -3060,12 +3339,18 @@ struct MenuContentView: View {
         count: Int,
         runningCount: Int? = nil
     ) -> some View {
-        HStack(spacing: 5) {
-            Text("\(section.title) (\(count))")
+        let sectionTitle = model.localized(section.titleKey)
+        return HStack(spacing: 5) {
+            Text(model.localized(.menuSectionCount, replacements: [
+                "section": sectionTitle,
+                "count": String(count)
+            ]))
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
             if let runningCount {
-                Text("· 运行中 \(runningCount)")
+                Text(model.localized(.menuSectionRunningCount, replacements: [
+                    "count": String(runningCount)
+                ]))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -3111,7 +3396,9 @@ struct MenuContentView: View {
         // float above every other app.
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
-            let settingsWindow = NSApp.windows.first { $0.title == "QuitHide 设置" }
+            let settingsIdentifier = NSUserInterfaceItemIdentifier("QuitHide.Settings")
+            let settingsWindow = NSApp.windows.first { $0.identifier == settingsIdentifier }
+                ?? NSApp.windows.first { $0.styleMask.contains(.titled) }
             settingsWindow?.makeKeyAndOrderFront(nil)
         }
     }
@@ -3154,7 +3441,7 @@ struct QuitHideApp: App {
         .menuBarExtraStyle(.window)
         .windowResizability(.contentSize)
 
-        Window("QuitHide 设置", id: "settings") {
+        Window(model.localized(.settingsTitle), id: "settings") {
             SettingsSheet()
                 .environmentObject(model)
         }

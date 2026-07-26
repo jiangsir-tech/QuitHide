@@ -282,15 +282,9 @@ struct AutomationPolicyTests {
         #expect(!AutomationDefaults.preQuitHideEnabled)
     }
 
-    @Test("Rule picker order and labels match the visible sections")
-    func rulePickerPresentation() {
+    @Test("Rule picker order matches the visible section semantics")
+    func rulePickerOrder() {
         #expect(AutoAction.rulePickerOrder == [.ignore, .unset, .hide, .quit])
-        #expect(AutoAction.rulePickerOrder.map(\.rulePickerTitle) == [
-            "不处理",
-            "未设置",
-            "自动隐藏",
-            "自动退出"
-        ])
     }
 
     @Test("An app without a rule inherits default hide")
