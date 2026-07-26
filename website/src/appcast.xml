@@ -1,0 +1,28 @@
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>QuitHide</title>
+        <item>
+            <title>0.5.0</title>
+            <pubDate>Sun, 26 Jul 2026 18:39:57 +0800</pubDate>
+            <sparkle:version>12</sparkle:version>
+            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## QuitHide 0.5.0
+
+### 简体中文
+
+接入 Sparkle 应用内安全更新：更新包与更新清单均经过 Ed25519 签名验证，后续版本优先通过 EdgeOne 与香港 COS 检查和下载，同时保留 GitHub Release 作为海外镜像与手动下载入口。
+
+### English
+
+Adds secure in-app updates with Sparkle. Update archives and the update feed are verified with Ed25519 signatures; future releases prefer EdgeOne and Hong Kong COS while retaining GitHub Releases as an overseas mirror and manual download option.
+]]></description>
+            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.5.0/QuitHide-v0.5.0-universal.dmg" length="3990448" type="application/octet-stream" sparkle:edSignature="kRRU70mXjx3jDpDgEzZHL4i6ySStx4+6EbewdpzWKV22QvWmJknDMu2NFra7vZzPZyzgjr6Y5PmVIvstR9vGBQ=="></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: 5tM8yWltFkLkc/hY6QRfK1WBSZevHfocGwo7MTL0+nNW+1vEjjSTtZY6aZJ08OIIB41qQG79OWHypxUgUfAJBA==
+length: 1681
+-->

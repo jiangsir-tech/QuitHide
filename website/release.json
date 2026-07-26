@@ -1,18 +1,18 @@
 {
-  "version": "0.4.0",
-  "build": 11,
+  "version": "0.5.0",
+  "build": 12,
   "minimumSystemVersion": "13.0",
-  "publishedAt": "2026-07-26T05:19:18Z",
+  "publishedAt": "2026-07-26T10:50:18Z",
   "releaseNotes": {
-    "zh-CN": "新增完整的简体中文与 English 界面，并支持在设置中跟随系统或手动切换语言；优化双语界面的文案与布局；补充本地化资源完整性校验。",
-    "en": "Adds complete Simplified Chinese and English interfaces, with system-following or manual language selection, refined bilingual copy and layout, and localization integrity checks."
+    "zh-CN": "接入 Sparkle 应用内安全更新：更新包与更新清单均经过 Ed25519 签名验证，后续版本优先通过 EdgeOne 与香港 COS 检查和下载，同时保留 GitHub Release 作为海外镜像与手动下载入口。",
+    "en": "Adds secure in-app updates with Sparkle. Update archives and the update feed are verified with Ed25519 signatures; future releases prefer EdgeOne and Hong Kong COS while retaining GitHub Releases as an overseas mirror and manual download option."
   },
-  "githubReleaseURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.4.0",
+  "githubReleaseURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.5.0",
   "file": {
-    "name": "QuitHide-v0.4.0-universal.dmg",
-    "size": 3182626,
-    "sha256": "af4025cb4afb2d7397f3fd80ceecef371d42901964a2a860331400d72bd5d0c0",
-    "directDownloadURL": "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.4.0/QuitHide-v0.4.0-universal.dmg",
-    "githubDownloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/download/v0.4.0/QuitHide-v0.4.0-universal.dmg"
+    "name": "QuitHide-v0.5.0-universal.dmg",
+    "size": 3990448,
+    "sha256": "7655fa678d3b581a0d2aadce9865daa9bacecc71d9e26d9f57ea8cfc921cfd02",
+    "directDownloadURL": "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.5.0/QuitHide-v0.5.0-universal.dmg",
+    "githubDownloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/download/v0.5.0/QuitHide-v0.5.0-universal.dmg"
   }
 }
