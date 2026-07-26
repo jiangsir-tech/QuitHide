@@ -26,4 +26,41 @@ if (!/\.product-visual img\s*\{[^}]*\bheight:\s*auto\b/s.test(styles)) {
   throw new Error("Product screenshot must preserve its intrinsic aspect ratio");
 }
 
+for (const [pattern, message] of [
+  [/\.button\s*\{[^}]*\bgap:\s*4px\b/s, "Download button text needs explicit spacing"],
+  [/\.soft \.eyebrow\s*\{[^}]*var\(--blue-on-soft\)/s, "Soft sections need an accessible accent color"],
+  [
+    /a:focus-visible,\s*button:focus-visible,\s*summary:focus-visible\s*\{[^}]*outline:\s*3px\s+solid[^}]*outline-offset:\s*3px/s,
+    "Links, buttons, and disclosure controls need a visible focus ring",
+  ],
+]) {
+  if (!pattern.test(styles)) throw new Error(message);
+}
+
+for (const [foreground, background] of [
+  ["subtle", "surface"],
+  ["blue-on-soft", "soft"],
+]) {
+  const ratio = contrastRatio(cssColor(foreground), cssColor(background));
+  if (ratio < 4.5) {
+    throw new Error(`${foreground} on ${background} has insufficient contrast: ${ratio.toFixed(2)}:1`);
+  }
+}
+
 console.log(`PASS: bilingual product site metadata for v${release.version}`);
+
+function cssColor(name) {
+  const match = styles.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i"));
+  if (!match) throw new Error(`Missing CSS color variable: ${name}`);
+  return match[1];
+}
+
+function contrastRatio(foreground, background) {
+  const values = [foreground, background].map((color) => {
+    const channels = [1, 3, 5].map((offset) => Number.parseInt(color.slice(offset, offset + 2), 16) / 255);
+    return channels
+      .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+  });
+  return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+}

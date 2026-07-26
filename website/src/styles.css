@@ -4,9 +4,10 @@
   --soft: #e9ece8;
   --text: #202322;
   --muted: #656a67;
-  --subtle: #868b88;
+  --subtle: #6a6f6c;
   --line: #d7dad6;
   --blue: #1769e0;
+  --blue-on-soft: #1462d0;
   --blue-hover: #0d59c2;
   --green: #137a4a;
   --shadow: 0 24px 70px rgba(34, 39, 36, 0.11);
@@ -23,6 +24,7 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 button, a { -webkit-tap-highlight-color: transparent; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--blue-hover); outline-offset: 3px; }
 .shell { width: min(1120px, calc(100% - 48px)); margin-inline: auto; }
 .skip-link { position: fixed; top: -80px; left: 16px; z-index: 100; padding: 10px 14px; background: var(--text); color: white; border-radius: 8px; }
 .skip-link:focus { top: 16px; }
@@ -50,7 +52,7 @@ h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spa
 .hero h2 { max-width: 680px; margin: 28px 0 14px; font-size: clamp(28px, 3.5vw, 44px); line-height: 1.2; letter-spacing: -0.042em; }
 .hero-summary { max-width: 640px; margin: 0; color: var(--muted); font-size: 18px; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
-.button { min-height: 50px; padding: 12px 20px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 11px; font-size: 15px; font-weight: 720; transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
+.button { min-height: 50px; padding: 12px 20px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid transparent; border-radius: 11px; font-size: 15px; font-weight: 720; transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
 .button:hover { transform: translateY(-1px); }
 .button.primary { color: white; background: var(--blue); box-shadow: 0 9px 22px rgba(23, 105, 224, 0.2); }
 .button.primary:hover { background: var(--blue-hover); }
@@ -72,6 +74,7 @@ h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spa
 .feature p { margin: 0; color: var(--muted); }
 
 .soft { background: var(--soft); }
+.soft .eyebrow { color: var(--blue-on-soft); }
 .privacy-grid { display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 96px; align-items: start; }
 .check-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid #cfd3cf; }
 .check-list li { padding: 17px 0; border-bottom: 1px solid #cfd3cf; color: #444945; }
