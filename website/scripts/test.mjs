@@ -25,7 +25,7 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
 
 for (const copy of [
   "在 Mac 上自动隐藏或退出不需要的 App",
-  "可以给不同 App 单独设置规则——离开台前一段时间后自动隐藏、自动退出，或者完全不处理。",
+  "自动处理不需要的 App，让精力更集中，让性能更集中。",
 ]) {
   if (!chineseText.includes(copy)) throw new Error(`Chinese hero is missing approved copy: ${copy}`);
 }
