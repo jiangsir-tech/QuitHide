@@ -1,8 +1,8 @@
 {
-  "version": "0.6.0",
-  "build": 14,
+  "version": "0.6.1",
+  "build": 15,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "新增两套可选窗口保护：台前调度开启时，含“不处理”App 的分组会保护其他成员，全部为自动规则的前台组合也会在移入侧边栏后才分别开始计时；台前调度关闭时，屏幕上仍可见的自动规则 App 不会被处理，只有窗口完全被其他 App 遮住后才从零计时。分组保护仅在开启时请求辅助功能权限；屏幕可见保护无需额外权限且不读取屏幕内容。另优化规则选择器的文字对齐并保留彩色状态图标。",
-  "releaseNotesEn": "Adds two optional window-protection modes. With Stage Manager on, a group containing an Ignore app protects its other members, while an all-automatic foreground group starts separate timers only after moving to the sidebar. With Stage Manager off, automatic-rule apps remain protected while any window is visible and restart timing only after all windows are fully covered. Group protection requests Accessibility only when enabled; visible-window protection needs no extra permission and never reads screen contents. Also aligns rule-picker labels while preserving their status colors.",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.0"
+  "releaseNotes": "恢复菜单窗口使用 macOS 系统默认背景透明效果，取消额外叠加的半透明背景。优化应用内更新说明：跨越多个版本升级时会累计显示当前版本之后的全部更新，并新增中英文完整更新历史页面；发布流程同时保留历史 appcast 项并校验更新记录连续性。",
+  "releaseNotesEn": "Restores the menu window's default macOS background translucency by removing the additional translucent overlay. Improves in-app release notes so upgrades spanning multiple versions show every change after the installed build, adds bilingual changelog pages, and strengthens appcast history retention and release continuity checks.",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.1"
 }

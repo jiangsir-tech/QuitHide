@@ -35,7 +35,7 @@
       "version": "0.6.1",
       "build": 15,
       "minimumSystemVersion": "13.0",
-      "publishedAt": "2026-07-27T18:04:13Z",
+      "publishedAt": "2026-07-27T18:12:26Z",
       "releaseNotes": {
         "zh-CN": "恢复菜单窗口使用 macOS 系统默认背景透明效果，取消额外叠加的半透明背景。优化应用内更新说明：跨越多个版本升级时会累计显示当前版本之后的全部更新，并新增中英文完整更新历史页面；发布流程同时保留历史 appcast 项并校验更新记录连续性。",
         "en": "Restores the menu window's default macOS background translucency by removing the additional translucent overlay. Improves in-app release notes so upgrades spanning multiple versions show every change after the installed build, adds bilingual changelog pages, and strengthens appcast history retention and release continuity checks."
