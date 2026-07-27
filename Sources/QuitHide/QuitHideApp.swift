@@ -142,6 +142,10 @@ final class AppModel: ObservableObject {
     }
 
     private static let logger = Logger(subsystem: "com.jiangsir.quithide", category: "automation")
+    private static let loginItemLogger = Logger(
+        subsystem: "com.jiangsir.quithide",
+        category: "login-item"
+    )
     private static let retryDelay: TimeInterval = 30
     private static let forceQuitVerificationDelay: TimeInterval = 5
     @Published var apps: [RunningAppItem] = []
@@ -382,7 +386,7 @@ final class AppModel: ObservableObject {
                 id: .loginItem,
                 message: localized(loginItemWarningKey),
                 showsLoginItemsSettingsButton:
-                    SMAppService.mainApp.status == .requiresApproval
+                    loginItemWarningKey == .warningLoginItemRequiresApproval
             ))
         }
         return warnings
@@ -1194,36 +1198,90 @@ final class AppModel: ObservableObject {
 
     func setLaunchAtLogin(_ enabled: Bool) {
         let service = SMAppService.mainApp
+        let initialStatus = service.status
+        let observedStatus = Self.loginItemObservedStatus(initialStatus)
+        let operation = LoginItemOperationPolicy.operation(
+            launchAtLoginShouldBeEnabled: enabled,
+            observedStatus: observedStatus
+        )
+
         do {
-            switch service.status {
-            case .enabled:
-                if !enabled {
-                    try service.unregister()
-                }
-            case .notRegistered:
-                if enabled {
-                    try service.register()
-                }
-            case .requiresApproval:
-                if enabled {
-                    refreshLoginStatus()
-                    statusMessage = localized(.warningLoginItemRequiresApproval)
-                    return
-                }
+            switch operation {
+            case .none:
+                break
+            case .register:
+                // `.notFound` describes a failed status observation. It does
+                // not prove that registration will fail, so honor the user's
+                // explicit request and let register() return the real result.
+                try service.register()
+            case .unregister:
                 try service.unregister()
-            case .notFound:
+            case .showApprovalInstructions:
                 refreshLoginStatus()
-                statusMessage = localized(.warningLoginItemNotFound)
+                statusMessage = localized(.warningLoginItemRequiresApproval)
                 return
-            @unknown default:
+            case .unsupported:
                 refreshLoginStatus()
                 loginItemWarningKey = .warningLoginItemFailed
                 statusMessage = localized(.warningLoginItemFailed)
                 return
             }
+
             refreshLoginStatus()
-            statusMessage = launchAtLogin ? "已设置登录时启动" : "已取消登录时启动"
+            scheduleLoginStatusRefresh()
+            if let loginItemWarningKey {
+                statusMessage = localized(loginItemWarningKey)
+            } else {
+                statusMessage = launchAtLogin ? "已设置登录时启动" : "已取消登录时启动"
+            }
         } catch {
+            let nsError = error as NSError
+            let finalStatus = service.status
+            let userInfoKeys = nsError.userInfo.keys
+                .map(String.init(describing:))
+                .sorted()
+                .joined(separator: ",")
+            let userInfoDescription = nsError.userInfo
+                .map { key, value in "\(key)=\(String(describing: value))" }
+                .sorted()
+                .joined(separator: ", ")
+            let bundlePath = Bundle.main.bundleURL.path
+            let resolvedBundlePath = Bundle.main.bundleURL
+                .resolvingSymlinksInPath()
+                .path
+            let executablePath = Bundle.main.executableURL?.path ?? "unavailable"
+            let bundleIdentifier = Bundle.main.bundleIdentifier ?? "unavailable"
+            let version = Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleShortVersionString"
+            ) as? String ?? "unavailable"
+            let build = Bundle.main.object(
+                forInfoDictionaryKey: "CFBundleVersion"
+            ) as? String ?? "unavailable"
+            Self.loginItemLogger.error(
+                "Login item operation failed desiredEnabled=\(enabled, privacy: .public) initialStatus=\(initialStatus.rawValue, privacy: .public) finalStatus=\(finalStatus.rawValue, privacy: .public) operation=\(String(describing: operation), privacy: .public) domain=\(nsError.domain, privacy: .public) code=\(nsError.code, privacy: .public) description=\(nsError.localizedDescription, privacy: .public) userInfoKeys=\(userInfoKeys, privacy: .public) userInfo=\(userInfoDescription, privacy: .private) bundlePath=\(bundlePath, privacy: .private) resolvedBundlePath=\(resolvedBundlePath, privacy: .private) executablePath=\(executablePath, privacy: .private) bundleIdentifier=\(bundleIdentifier, privacy: .public) version=\(version, privacy: .public) build=\(build, privacy: .public)"
+            )
+
+            if operation == .register,
+               nsError.code == Int(kSMErrorAlreadyRegistered) {
+                refreshLoginStatus()
+                scheduleLoginStatusRefresh()
+                return
+            }
+            if operation == .register,
+               nsError.code == Int(kSMErrorLaunchDeniedByUser) {
+                launchAtLogin = false
+                loginItemWarningKey = .warningLoginItemRequiresApproval
+                statusMessage = localized(.warningLoginItemRequiresApproval)
+                return
+            }
+            if operation == .unregister,
+               nsError.code == Int(kSMErrorJobNotFound) {
+                launchAtLogin = false
+                loginItemWarningKey = nil
+                statusMessage = "已取消登录时启动"
+                return
+            }
+
             refreshLoginStatus()
             statusMessage = localized(.warningLoginItemFailed)
             loginItemWarningKey = .warningLoginItemFailed
@@ -1667,6 +1725,29 @@ final class AppModel: ObservableObject {
         @unknown default:
             launchAtLogin = false
             loginItemWarningKey = .warningLoginItemFailed
+        }
+    }
+
+    private static func loginItemObservedStatus(
+        _ status: SMAppService.Status
+    ) -> LoginItemObservedStatus {
+        switch status {
+        case .notRegistered:
+            return .notRegistered
+        case .enabled:
+            return .enabled
+        case .requiresApproval:
+            return .requiresApproval
+        case .notFound:
+            return .notFound
+        @unknown default:
+            return .unknown
+        }
+    }
+
+    private func scheduleLoginStatusRefresh() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.refreshLoginStatus()
         }
     }
 
@@ -3097,6 +3178,8 @@ struct MenuContentView: View {
 
 @main
 struct QuitHideApp: App {
+    @NSApplicationDelegateAdaptor(QuitHideApplicationDelegate.self)
+    private var applicationDelegate
     @StateObject private var model = AppModel()
     @StateObject private var updateController = SparkleUpdateController()
 

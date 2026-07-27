@@ -19,7 +19,17 @@
 "warning.rule_registry.save_failed" = "Could not save the rules. Try again later.";
 "warning.login_item.failed" = "Could not update the login item. Try again later.";
 "warning.login_item.requires_approval" = "The login item needs approval. Allow QuitHide in System Settings > General > Login Items.";
-"warning.login_item.not_found" = "macOS could not find the QuitHide login item. Make sure QuitHide is in Applications and try again.";
+"warning.login_item.not_found" = "macOS could not read the QuitHide login item status. Quit and reopen QuitHide, then try again.";
+
+/* Installation location */
+"app_installation.title" = "Install QuitHide First";
+"app_installation.reason.app_translocation" = "macOS is running QuitHide from a temporary security location. Quit QuitHide, drag the downloaded QuitHide.app into Applications, and reopen it from there.";
+"app_installation.reason.volume" = "QuitHide is still running from its disk image. Quit QuitHide, drag QuitHide.app into Applications, and reopen it from there.";
+"app_installation.reason.downloads" = "QuitHide is still running from Downloads. Quit QuitHide, drag QuitHide.app into Applications, and reopen it from there.";
+"app_installation.reason.other_location" = "QuitHide is not running from Applications. To keep Launch at Login and automatic updates reliable, quit and move QuitHide.app into Applications.";
+"app_installation.action.reveal_and_quit" = "Quit and Show QuitHide";
+"app_installation.action.open_applications_and_quit" = "Quit and Open Applications";
+"app_installation.action.continue" = "Continue for Now";
 
 /* Main menu */
 "menu.subtitle" = "Automatically hide or quit unused apps";

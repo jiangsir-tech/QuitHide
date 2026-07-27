@@ -140,6 +140,14 @@ struct LocalizationResourceTests {
         #expect(english.text(.settingsTitle) == "QuitHide Settings")
         #expect(chinese.text(.statusQuitNotCompleted) == "退出未完成")
         #expect(english.text(.statusQuitNotCompleted) == "Quit Not Completed")
+        #expect(
+            !chinese.text(.warningLoginItemNotFound).contains("应用程序")
+        )
+        #expect(
+            !english.text(.warningLoginItemNotFound).contains("Applications")
+        )
+        #expect(chinese.text(.appInstallationTitle) == "请先安装 QuitHide")
+        #expect(english.text(.appInstallationTitle) == "Install QuitHide First")
     }
 
     @Test("Named tokens are replaced without changing unknown tokens")

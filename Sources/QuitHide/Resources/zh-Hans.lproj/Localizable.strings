@@ -19,7 +19,17 @@
 "warning.rule_registry.save_failed" = "保存规则失败，请稍后重试";
 "warning.login_item.failed" = "登录项设置失败，请稍后重试";
 "warning.login_item.requires_approval" = "登录项等待系统批准。请在“系统设置 > 通用 > 登录项”中允许 QuitHide。";
-"warning.login_item.not_found" = "系统未找到 QuitHide 登录项。请确认 QuitHide 位于“应用程序”文件夹后重试。";
+"warning.login_item.not_found" = "macOS 暂时无法读取 QuitHide 登录项状态。请完全退出并重新打开 QuitHide 后再试。";
+
+/* Installation location */
+"app_installation.title" = "请先安装 QuitHide";
+"app_installation.reason.app_translocation" = "macOS 当前从临时安全位置运行 QuitHide。请退出 QuitHide，将下载的 QuitHide.app 拖入“应用程序”文件夹，再从那里重新打开。";
+"app_installation.reason.volume" = "QuitHide 当前仍在安装镜像中运行。请退出 QuitHide，将 QuitHide.app 拖入“应用程序”文件夹，再从那里重新打开。";
+"app_installation.reason.downloads" = "QuitHide 当前仍在“下载”文件夹中运行。请退出 QuitHide，将 QuitHide.app 拖入“应用程序”文件夹，再从那里重新打开。";
+"app_installation.reason.other_location" = "QuitHide 当前不在“应用程序”文件夹中运行。为确保登录时启动和自动更新正常，请退出并将 QuitHide.app 移入“应用程序”文件夹。";
+"app_installation.action.reveal_and_quit" = "退出并显示 QuitHide";
+"app_installation.action.open_applications_and_quit" = "退出并打开“应用程序”";
+"app_installation.action.continue" = "暂时继续";
 
 /* Main menu */
 "menu.subtitle" = "自动隐藏或退出不需要的 App";

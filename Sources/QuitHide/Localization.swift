@@ -59,6 +59,15 @@ enum L10n {
         case warningLoginItemRequiresApproval = "warning.login_item.requires_approval"
         case warningLoginItemNotFound = "warning.login_item.not_found"
 
+        case appInstallationTitle = "app_installation.title"
+        case appInstallationReasonAppTranslocation = "app_installation.reason.app_translocation"
+        case appInstallationReasonVolume = "app_installation.reason.volume"
+        case appInstallationReasonDownloads = "app_installation.reason.downloads"
+        case appInstallationReasonOtherLocation = "app_installation.reason.other_location"
+        case appInstallationRevealAndQuit = "app_installation.action.reveal_and_quit"
+        case appInstallationOpenApplicationsAndQuit = "app_installation.action.open_applications_and_quit"
+        case appInstallationContinue = "app_installation.action.continue"
+
         case menuSubtitle = "menu.subtitle"
         case menuAutomationEnabled = "menu.automation.enabled"
         case menuAutomationPaused = "menu.automation.paused"
