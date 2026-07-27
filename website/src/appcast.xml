@@ -4,25 +4,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>QuitHide</title>
         <item>
-            <title>0.5.1</title>
-            <pubDate>Mon, 27 Jul 2026 13:04:08 +0800</pubDate>
-            <sparkle:version>13</sparkle:version>
-            <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
+            <title>0.6.0</title>
+            <pubDate>Tue, 28 Jul 2026 00:37:58 +0800</pubDate>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## QuitHide 0.5.1
+            <description sparkle:format="markdown"><![CDATA[## QuitHide 0.6.0
 
 ### 简体中文
 
-修复部分 Mac 因 macOS 无法读取登录项状态而无法开启“登录时启动”的问题；QuitHide 现在会在从磁盘映像、“下载”文件夹或其他非“应用程序”位置运行时主动提醒移动并重新打开，并为 DMG 增加清晰的拖拽安装指引。
+新增两套可选窗口保护：台前调度开启时，含“不处理”App 的分组会保护其他成员，全部为自动规则的前台组合也会在移入侧边栏后才分别开始计时；台前调度关闭时，屏幕上仍可见的自动规则 App 不会被处理，只有窗口完全被其他 App 遮住后才从零计时。分组保护仅在开启时请求辅助功能权限；屏幕可见保护无需额外权限且不读取屏幕内容。另优化规则选择器的文字对齐并保留彩色状态图标。
 
 ### English
 
-Fixes an issue that prevented Launch at Login from being enabled when macOS could not read the login item status. QuitHide now prompts users to move and reopen the app when it is running from a disk image, Downloads, or another location outside Applications, and the DMG now provides clear drag-to-Applications instructions.
+Adds two optional window-protection modes. With Stage Manager on, a group containing an Ignore app protects its other members, while an all-automatic foreground group starts separate timers only after moving to the sidebar. With Stage Manager off, automatic-rule apps remain protected while any window is visible and restart timing only after all windows are fully covered. Group protection requests Accessibility only when enabled; visible-window protection needs no extra permission and never reads screen contents. Also aligns rule-picker labels while preserving their status colors.
 ]]></description>
-            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.5.1/QuitHide-v0.5.1-universal.dmg" length="3703062" type="application/octet-stream" sparkle:edSignature="9hW+IUAglpyTZVEJGBqXpXsZYg+30+CnntSy35SRUk80Eytn4LRrmBc7k++C0e+7tOLMWEeh98GU35cLQldHAw=="></enclosure>
+            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.0/QuitHide-v0.6.0-universal.dmg" length="3943575" type="application/octet-stream" sparkle:edSignature="v83YTrfAFd8HGJp+zZysVvb0hL+XYKagavdHIcwhC61DPI0UTLG6HFJwXUiZbZlOV6s+RWUyEvXJQYliSLulBA=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: GoxPh/RnB+UgwE47pFNVy2p1xEc+sCF0a/5c9aXv7kqgSWhWrhs5dED4pXPnPdTzGRq0/e7uLq/b1kb/0i+TCA==
-length: 1819
+edSignature: 4pnTgM6CkO9tdQcnNoCXL9f60oPVmDkeWSRPBSB5+NdQS9gmzRafljbTt8ifbqm9eYyd36+X6gHaY/a2C175Bw==
+length: 2315
 -->

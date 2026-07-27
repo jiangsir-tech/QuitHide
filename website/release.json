@@ -1,18 +1,18 @@
 {
-  "version": "0.5.1",
-  "build": 13,
+  "version": "0.6.0",
+  "build": 14,
   "minimumSystemVersion": "13.0",
-  "publishedAt": "2026-07-27T05:04:58Z",
+  "publishedAt": "2026-07-27T16:39:20Z",
   "releaseNotes": {
-    "zh-CN": "修复部分 Mac 因 macOS 无法读取登录项状态而无法开启“登录时启动”的问题；QuitHide 现在会在从磁盘映像、“下载”文件夹或其他非“应用程序”位置运行时主动提醒移动并重新打开，并为 DMG 增加清晰的拖拽安装指引。",
-    "en": "Fixes an issue that prevented Launch at Login from being enabled when macOS could not read the login item status. QuitHide now prompts users to move and reopen the app when it is running from a disk image, Downloads, or another location outside Applications, and the DMG now provides clear drag-to-Applications instructions."
+    "zh-CN": "新增两套可选窗口保护：台前调度开启时，含“不处理”App 的分组会保护其他成员，全部为自动规则的前台组合也会在移入侧边栏后才分别开始计时；台前调度关闭时，屏幕上仍可见的自动规则 App 不会被处理，只有窗口完全被其他 App 遮住后才从零计时。分组保护仅在开启时请求辅助功能权限；屏幕可见保护无需额外权限且不读取屏幕内容。另优化规则选择器的文字对齐并保留彩色状态图标。",
+    "en": "Adds two optional window-protection modes. With Stage Manager on, a group containing an Ignore app protects its other members, while an all-automatic foreground group starts separate timers only after moving to the sidebar. With Stage Manager off, automatic-rule apps remain protected while any window is visible and restart timing only after all windows are fully covered. Group protection requests Accessibility only when enabled; visible-window protection needs no extra permission and never reads screen contents. Also aligns rule-picker labels while preserving their status colors."
   },
-  "githubReleaseURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.5.1",
+  "githubReleaseURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.0",
   "file": {
-    "name": "QuitHide-v0.5.1-universal.dmg",
-    "size": 3703062,
-    "sha256": "b7c23973f06abe41839ba25f616bbef842fb8b9e9a2f790a960477502f14a263",
-    "directDownloadURL": "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.5.1/QuitHide-v0.5.1-universal.dmg",
-    "githubDownloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/download/v0.5.1/QuitHide-v0.5.1-universal.dmg"
+    "name": "QuitHide-v0.6.0-universal.dmg",
+    "size": 3943575,
+    "sha256": "3e57702941aa05a675e5f4d3d17d1b7f0b91aff8502b42dd3f5686b4f969e66f",
+    "directDownloadURL": "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.0/QuitHide-v0.6.0-universal.dmg",
+    "githubDownloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/download/v0.6.0/QuitHide-v0.6.0-universal.dmg"
   }
 }
