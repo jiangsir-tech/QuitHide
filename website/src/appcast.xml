@@ -4,25 +4,25 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>QuitHide</title>
         <item>
-            <title>0.5.0</title>
-            <pubDate>Sun, 26 Jul 2026 18:39:57 +0800</pubDate>
-            <sparkle:version>12</sparkle:version>
-            <sparkle:shortVersionString>0.5.0</sparkle:shortVersionString>
+            <title>0.5.1</title>
+            <pubDate>Mon, 27 Jul 2026 13:04:08 +0800</pubDate>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>0.5.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## QuitHide 0.5.0
+            <description sparkle:format="markdown"><![CDATA[## QuitHide 0.5.1
 
 ### 简体中文
 
-接入 Sparkle 应用内安全更新：更新包与更新清单均经过 Ed25519 签名验证，后续版本优先通过 EdgeOne 与香港 COS 检查和下载，同时保留 GitHub Release 作为海外镜像与手动下载入口。
+修复部分 Mac 因 macOS 无法读取登录项状态而无法开启“登录时启动”的问题；QuitHide 现在会在从磁盘映像、“下载”文件夹或其他非“应用程序”位置运行时主动提醒移动并重新打开，并为 DMG 增加清晰的拖拽安装指引。
 
 ### English
 
-Adds secure in-app updates with Sparkle. Update archives and the update feed are verified with Ed25519 signatures; future releases prefer EdgeOne and Hong Kong COS while retaining GitHub Releases as an overseas mirror and manual download option.
+Fixes an issue that prevented Launch at Login from being enabled when macOS could not read the login item status. QuitHide now prompts users to move and reopen the app when it is running from a disk image, Downloads, or another location outside Applications, and the DMG now provides clear drag-to-Applications instructions.
 ]]></description>
-            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.5.0/QuitHide-v0.5.0-universal.dmg" length="3990448" type="application/octet-stream" sparkle:edSignature="kRRU70mXjx3jDpDgEzZHL4i6ySStx4+6EbewdpzWKV22QvWmJknDMu2NFra7vZzPZyzgjr6Y5PmVIvstR9vGBQ=="></enclosure>
+            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.5.1/QuitHide-v0.5.1-universal.dmg" length="3703062" type="application/octet-stream" sparkle:edSignature="9hW+IUAglpyTZVEJGBqXpXsZYg+30+CnntSy35SRUk80Eytn4LRrmBc7k++C0e+7tOLMWEeh98GU35cLQldHAw=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: 5tM8yWltFkLkc/hY6QRfK1WBSZevHfocGwo7MTL0+nNW+1vEjjSTtZY6aZJ08OIIB41qQG79OWHypxUgUfAJBA==
-length: 1681
+edSignature: GoxPh/RnB+UgwE47pFNVy2p1xEc+sCF0a/5c9aXv7kqgSWhWrhs5dED4pXPnPdTzGRq0/e7uLq/b1kb/0i+TCA==
+length: 1819
 -->
