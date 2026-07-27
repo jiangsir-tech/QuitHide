@@ -1,8 +1,8 @@
 {
-  "version": "0.5.1",
-  "build": 13,
+  "version": "0.5.0",
+  "build": 12,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "修复部分 Mac 因 macOS 无法读取登录项状态而无法开启“登录时启动”的问题；QuitHide 现在会在从磁盘映像、“下载”文件夹或其他非“应用程序”位置运行时主动提醒移动并重新打开，并为 DMG 增加清晰的拖拽安装指引。",
-  "releaseNotesEn": "Fixes an issue that prevented Launch at Login from being enabled when macOS could not read the login item status. QuitHide now prompts users to move and reopen the app when it is running from a disk image, Downloads, or another location outside Applications, and the DMG now provides clear drag-to-Applications instructions.",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.5.1"
+  "releaseNotes": "接入 Sparkle 应用内安全更新：更新包与更新清单均经过 Ed25519 签名验证，后续版本优先通过 EdgeOne 与香港 COS 检查和下载，同时保留 GitHub Release 作为海外镜像与手动下载入口。",
+  "releaseNotesEn": "Adds secure in-app updates with Sparkle. Update archives and the update feed are verified with Ed25519 signatures; future releases prefer EdgeOne and Hong Kong COS while retaining GitHub Releases as an overseas mirror and manual download option.",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.5.0"
 }
