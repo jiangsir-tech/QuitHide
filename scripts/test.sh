@@ -23,6 +23,10 @@ cd "$PROJECT_DIR"
     Sources/QuitHide/AutomationPolicy.swift \
     Sources/QuitHide/AppRuleRegistry.swift \
     Sources/QuitHide/AutomationTiming.swift \
+    Sources/QuitHide/AutomaticWindowProtection.swift \
+    Sources/QuitHide/ScreenVisibilityProtection.swift \
+    Sources/QuitHide/StageManagerGroupProtection.swift \
+    Sources/QuitHide/StageManagerSystemStateProvider.swift \
     Sources/QuitHide/MenuHeightPolicy.swift \
     Sources/QuitHide/QuitRequestPolicy.swift \
     Tests/PortableChecks/main.swift \

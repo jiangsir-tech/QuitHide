@@ -37,9 +37,10 @@ enum RuntimeApplicationIdentity {
 enum ApplicationUnhidePolicy {
     static func shouldRestartTimer(
         actionIsAutomated: Bool,
-        applicationIsActive: Bool
+        applicationIsActive: Bool,
+        applicationIsHeld: Bool = false
     ) -> Bool {
-        actionIsAutomated && !applicationIsActive
+        actionIsAutomated && !applicationIsActive && !applicationIsHeld
     }
 }
 
@@ -104,6 +105,8 @@ struct TimingSuspension {
     enum Reason: Hashable {
         case manualPause
         case systemSleep
+        case systemSessionInactive
+        case automaticWindowProtectionUnavailable
     }
 
     private(set) var reasons: Set<Reason> = []
@@ -115,9 +118,7 @@ struct TimingSuspension {
 
     mutating func suspend(for reason: Reason, at instant: TimeInterval) {
         guard reasons.insert(reason).inserted else { return }
-        if reasons.count == 1 {
-            startedAt = instant
-        }
+        startedAt = min(startedAt ?? instant, instant)
     }
 
     mutating func resume(for reason: Reason, at instant: TimeInterval) -> TimeInterval? {

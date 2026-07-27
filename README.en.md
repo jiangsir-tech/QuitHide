@@ -21,6 +21,7 @@ macOS 13 Ventura or later · Apple Silicon and Intel Macs · English and Simplif
 - See countdowns and upcoming actions; run matching rules early or right-click one app for an immediate action.
 - Pause automation at any time, optionally launch at login, and receive stable-release update reminders.
 - Opt into two additional rules: auto-hide apps without a rule, and hide Automatic Quit apps before quitting them.
+- Opt into window protection: protect Stage Manager groups while it is on, or visible automatic-rule apps while it is off.
 
 | Rule | Behavior |
 | --- | --- |
@@ -35,13 +36,14 @@ macOS 13 Ventura or later · Apple Silicon and Intel Macs · English and Simplif
 2. Click the QuitHide menu bar icon and find an app under **Running**.
 3. Choose a rule and delay. Use the footer buttons or an app's right-click menu for one-off actions.
 
-Both **Additional Rules** switches are off on a fresh installation, so apps without an explicit rule are not automated by default.
+The **Additional Rules** and both window-protection options are off on a fresh installation, so apps without an explicit rule are not automated and QuitHide does not proactively request Accessibility access. That permission is requested only if Stage Manager group protection is enabled.
 
 ## Safety and privacy
 
 - Automatic Quit uses the standard macOS quit request and **never force-quits automatically**. Manual Force Quit is available only from an app's right-click menu and requires confirmation.
 - QuitHide manages standard macOS GUI apps. Menu bar-only apps, background processes, and command-line tools may not appear.
 - Rules and settings stay on this Mac. QuitHide contains no analytics service and does not upload the running-app list.
+- Visible-window protection reads only window positions and frames, never screen contents. Stage Manager group protection uses Accessibility only after you enable it.
 - The current stable release is Developer ID signed and notarized by Apple.
 
 ## Feedback

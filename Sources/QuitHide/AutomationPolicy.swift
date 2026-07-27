@@ -3,6 +3,8 @@ import Foundation
 enum AutomationDefaults {
     static let unconfiguredHideEnabled = false
     static let preQuitHideEnabled = false
+    static let stageManagerGroupProtectionEnabled = false
+    static let screenVisibilityProtectionEnabled = false
 }
 
 enum AutoAction: String, CaseIterable, Codable {

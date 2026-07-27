@@ -37,6 +37,17 @@ expect(
     "resuming shifts an idle timestamp by the captured sleep interval"
 )
 
+var retroactiveSuspension = TimingSuspension()
+retroactiveSuspension.suspend(for: .systemSleep, at: 1_010)
+retroactiveSuspension.suspend(
+    for: .automaticWindowProtectionUnavailable,
+    at: 1_000
+)
+expect(
+    retroactiveSuspension.effectiveNow(at: 1_020) == 1_000,
+    "a late failure report preserves its earlier read start"
+)
+
 var retry = ActionRetryState()
 retry.recordFailure(at: pauseStart, delay: 30)
 expect(!retry.canAttempt(at: pauseStart + 29), "retry observes cooldown")
@@ -96,8 +107,140 @@ expect(
 )
 
 expect(
-    !AutomationDefaults.unconfiguredHideEnabled && !AutomationDefaults.preQuitHideEnabled,
-    "both additional rules are disabled for a new user"
+    !AutomationDefaults.unconfiguredHideEnabled &&
+        !AutomationDefaults.preQuitHideEnabled &&
+        !AutomationDefaults.stageManagerGroupProtectionEnabled &&
+        !AutomationDefaults.screenVisibilityProtectionEnabled,
+    "all additional rules are disabled for a new user"
+)
+expect(
+    AutomaticWindowProtectionModePolicy.mode(
+        stageManagerGroupProtectionEnabled: true,
+        screenVisibilityProtectionEnabled: true,
+        stageManagerSystemState: .enabled
+    ) == .stageManager,
+    "Stage Manager on routes exclusively to group protection"
+)
+expect(
+    AutomaticWindowProtectionModePolicy.mode(
+        stageManagerGroupProtectionEnabled: true,
+        screenVisibilityProtectionEnabled: true,
+        stageManagerSystemState: .disabled
+    ) == .screenVisibility,
+    "Stage Manager off routes to screen visibility protection"
+)
+expect(
+    AutomaticWindowProtectionModePolicy.mode(
+        stageManagerGroupProtectionEnabled: false,
+        screenVisibilityProtectionEnabled: true,
+        stageManagerSystemState: .unavailable
+    ) == .unavailable,
+    "an uncertain Stage Manager mode fails closed"
+)
+
+let stageIgnoreBundle = "com.example.ignore"
+let stageHideBundle = "com.example.hide"
+let stageQuitBundle = "com.example.quit"
+let sidebarIgnoreSnapshot = StageManagerGroupingSnapshot(groups: [
+    StageManagerAppGroup(
+        displayID: 1,
+        placement: .sidebar,
+        bundleIdentifiers: [stageIgnoreBundle, stageHideBundle]
+    )
+])
+let sidebarIgnoreEvaluation = StageManagerGroupProtectionPolicy.evaluate(
+    featureEnabled: true,
+    groupingState: .available(sidebarIgnoreSnapshot),
+    explicitActions: [
+        stageIgnoreBundle: .ignore,
+        stageHideBundle: .hide
+    ]
+)
+expect(
+    sidebarIgnoreEvaluation.protectedBundleIdentifiers == [
+        stageIgnoreBundle,
+        stageHideBundle
+    ],
+    "an explicit Ignore app protects its sidebar group"
+)
+expect(
+    StageManagerGroupProtectionPolicy.evaluate(
+        featureEnabled: true,
+        groupingState: .available(StageManagerGroupingSnapshot(groups: [
+            StageManagerAppGroup(
+                displayID: 1,
+                placement: .sidebar,
+                bundleIdentifiers: [stageHideBundle, stageQuitBundle]
+            )
+        ])),
+        explicitActions: [
+            stageHideBundle: .hide,
+            stageQuitBundle: .quit
+        ]
+    ) == .evaluated([:]),
+    "an all-automatic sidebar group keeps separate automation"
+)
+expect(
+    StageManagerGroupProtectionPolicy.evaluate(
+        featureEnabled: true,
+        groupingState: .available(StageManagerGroupingSnapshot(groups: [
+            StageManagerAppGroup(
+                displayID: 1,
+                placement: .foreground,
+                bundleIdentifiers: [stageHideBundle, stageQuitBundle]
+            )
+        ])),
+        explicitActions: [
+            stageHideBundle: .hide,
+            stageQuitBundle: .quit
+        ]
+    ).protectedBundleIdentifiers == [stageHideBundle, stageQuitBundle],
+    "an all-automatic foreground group is held"
+)
+expect(
+    StageManagerGroupProtectionPolicy.evaluate(
+        featureEnabled: true,
+        groupingState: .disabled,
+        explicitActions: [stageIgnoreBundle: .ignore]
+    ) == .legacy,
+    "Stage Manager being off always preserves legacy behavior"
+)
+expect(
+    StageManagerGroupProtectionPolicy.evaluate(
+        featureEnabled: true,
+        groupingState: .permissionRequired,
+        explicitActions: [:]
+    ) == .unavailable(.permissionRequired),
+    "missing Accessibility permission fails closed"
+)
+let firstReleaseObservation = StageManagerProtectionTransitionPolicy.transition(
+    current: [stageHideBundle],
+    pendingReleaseCandidate: nil,
+    proposed: [],
+    requireStableRelease: true
+)
+let secondReleaseObservation = StageManagerProtectionTransitionPolicy.transition(
+    current: firstReleaseObservation.protectedBundleIdentifiers,
+    pendingReleaseCandidate: firstReleaseObservation.pendingReleaseCandidate,
+    proposed: [],
+    requireStableRelease: true
+)
+expect(
+    firstReleaseObservation.protectedBundleIdentifiers == [stageHideBundle] &&
+        secondReleaseObservation.protectedBundleIdentifiers.isEmpty,
+    "protection is released only after two matching snapshots"
+)
+expect(
+    StageManagerAutomaticActionPolicy.shouldAllow(
+        isAutomaticAction: false,
+        bundleIsProtected: true,
+        groupingIsUnavailable: true
+    ) && !StageManagerAutomaticActionPolicy.shouldAllow(
+        isAutomaticAction: true,
+        bundleIsProtected: true,
+        groupingIsUnavailable: false
+    ),
+    "manual actions bypass protection while automatic actions are held"
 )
 
 expect(

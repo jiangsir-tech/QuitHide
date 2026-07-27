@@ -33,6 +33,34 @@ struct AutomationTimingTests {
         #expect(suspension.resume(for: .manualPause, at: start + 120) == 120)
     }
 
+    @Test("A Stage Manager read failure overlaps other pauses without double shifting")
+    func overlappingStageManagerFailureShiftsOnce() {
+        let start: TimeInterval = 1_000
+        var suspension = TimingSuspension()
+
+        suspension.suspend(for: .automaticWindowProtectionUnavailable, at: start)
+        suspension.suspend(for: .systemSleep, at: start + 10)
+        #expect(suspension.resume(
+            for: .automaticWindowProtectionUnavailable,
+            at: start + 100
+        ) == nil)
+        #expect(suspension.resume(for: .systemSleep, at: start + 120) == 120)
+    }
+
+    @Test("A late failure report can move the suspension start backwards")
+    func retroactiveFailureStartIsPreserved() {
+        var suspension = TimingSuspension()
+
+        suspension.suspend(for: .systemSleep, at: 1_010)
+        suspension.suspend(for: .automaticWindowProtectionUnavailable, at: 1_000)
+        #expect(suspension.effectiveNow(at: 1_020) == 1_000)
+        #expect(suspension.resume(for: .systemSleep, at: 1_100) == nil)
+        #expect(suspension.resume(
+            for: .automaticWindowProtectionUnavailable,
+            at: 1_120
+        ) == 120)
+    }
+
     @Test("A captured sleep interval does not advance effective automation time")
     func sleepDoesNotAdvanceEffectiveTime() {
         let inactiveAt: TimeInterval = 900
@@ -94,6 +122,15 @@ struct ApplicationUnhidePolicyTests {
         #expect(!ApplicationUnhidePolicy.shouldRestartTimer(
             actionIsAutomated: false,
             applicationIsActive: false
+        ))
+    }
+
+    @Test("A protected inactive app does not restart its timer when unhidden")
+    func heldAppDoesNotRestartTimer() {
+        #expect(!ApplicationUnhidePolicy.shouldRestartTimer(
+            actionIsAutomated: true,
+            applicationIsActive: false,
+            applicationIsHeld: true
         ))
     }
 }
@@ -276,10 +313,12 @@ struct PreQuitHideTimingTests {
 
 @Suite("Default automation policy")
 struct AutomationPolicyTests {
-    @Test("Both additional rules are disabled for a new user")
+    @Test("All additional rules are disabled for a new user")
     func additionalRulesDefaultOff() {
         #expect(!AutomationDefaults.unconfiguredHideEnabled)
         #expect(!AutomationDefaults.preQuitHideEnabled)
+        #expect(!AutomationDefaults.stageManagerGroupProtectionEnabled)
+        #expect(!AutomationDefaults.screenVisibilityProtectionEnabled)
     }
 
     @Test("Rule picker order matches the visible section semantics")
