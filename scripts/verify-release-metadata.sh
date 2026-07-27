@@ -4,6 +4,8 @@ set -euo pipefail
 PROJECT_DIR="${1:-${0:A:h:h}}"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 UPDATE_JSON="$PROJECT_DIR/update.json"
+RELEASE_HISTORY_JSON="$PROJECT_DIR/release-history.json"
+RELEASE_NOTES_GENERATOR="$PROJECT_DIR/website/scripts/create-sparkle-release-notes.mjs"
 
 APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
 APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
@@ -74,6 +76,11 @@ if [[ "$MANIFEST_DOWNLOAD_URL" != "$EXPECTED_DOWNLOAD_URL" ]]; then
         "$MANIFEST_DOWNLOAD_URL" "$EXPECTED_DOWNLOAD_URL" >&2
     exit 1
 fi
+
+/usr/bin/env node "$RELEASE_NOTES_GENERATOR" \
+    --history "$RELEASE_HISTORY_JSON" \
+    --manifest "$UPDATE_JSON" \
+    --output /dev/null
 
 /usr/bin/printf 'Release metadata verified: %s (%s), macOS %s+\n' \
     "$APP_VERSION" "$APP_BUILD" "$APP_MINIMUM_SYSTEM"

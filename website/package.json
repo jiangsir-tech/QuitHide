@@ -9,7 +9,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
-    "test": "node scripts/test.mjs && npm run test:download-stats && node scripts/verify-sparkle-release-tests.mjs",
+    "test": "node scripts/test.mjs && npm run test:download-stats && node scripts/release-history-tests.mjs && node scripts/verify-sparkle-release-tests.mjs",
     "test:download-stats": "node --test tests/download-stats-*.test.mjs"
   },
   "dependencies": {

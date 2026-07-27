@@ -2,15 +2,19 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { INITIAL_GITHUB_DOWNLOADS } from "../lib/download-stats-core.js";
+import { validateReleaseHistory } from "../lib/release-history-core.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const websiteDirectory = path.resolve(scriptDirectory, "..");
 const sourceDirectory = path.join(websiteDirectory, "src");
 const outputDirectory = path.join(websiteDirectory, "dist");
 const releasePath = path.join(websiteDirectory, "release.json");
+const releaseHistoryPath = path.resolve(websiteDirectory, "../release-history.json");
 
 const release = JSON.parse(await readFile(releasePath, "utf8"));
 validateRelease(release);
+const releaseHistory = JSON.parse(await readFile(releaseHistoryPath, "utf8"));
+const releases = validateReleaseHistory(releaseHistory, { currentRelease: release });
 
 const siteURL = normalizeSiteURL(
   process.env.QUITHIDE_SITE_URL || "http://localhost:4173",
@@ -39,6 +43,8 @@ const replacements = {
   "{{GITHUB_RELEASE_URL}}": release.githubReleaseURL,
   "{{GITHUB_DOWNLOAD_URL}}": release.file.githubDownloadURL,
   "{{DOWNLOAD_TOTAL_FALLBACK}}": String(INITIAL_GITHUB_DOWNLOADS),
+  "{{CHANGELOG_ENTRIES_ZH}}": renderChangelogEntries(releases, "zh-CN"),
+  "{{CHANGELOG_ENTRIES_EN}}": renderChangelogEntries(releases, "en"),
   "{{SOFTWARE_JSON_LD_ZH}}": JSON.stringify(
     softwareJSONLD(release, siteURL, "zh-CN"),
   ).replaceAll("<", "\\u003c"),
@@ -50,6 +56,8 @@ const replacements = {
 for (const relativePath of [
   "index.html",
   "en/index.html",
+  "changelog/index.html",
+  "en/changelog/index.html",
   "robots.txt",
   "sitemap.xml",
 ]) {
@@ -67,6 +75,10 @@ for (const relativePath of [
 await writeFile(
   path.join(outputDirectory, "release.json"),
   `${JSON.stringify(release, null, 2)}\n`,
+);
+await writeFile(
+  path.join(outputDirectory, "release-history.json"),
+  `${JSON.stringify(releaseHistory, null, 2)}\n`,
 );
 
 console.log(`Built QuitHide product site for v${release.version} at ${siteURL}`);
@@ -124,6 +136,32 @@ function escapeHTML(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function renderChangelogEntries(history, language) {
+  const isChinese = language === "zh-CN";
+  return [...history].reverse().map((entry) => {
+    const publishedDate = formatDate(
+      entry.publishedAt,
+      isChinese ? "zh-CN" : "en-US",
+    );
+    const notes = escapeHTML(entry.releaseNotes[language]);
+    const version = escapeHTML(entry.version);
+    const releaseURL =
+      `https://github.com/jiangsir-tech/QuitHide/releases/tag/v${version}`;
+    return `<article class="changelog-entry" id="v${version.replaceAll(".", "-")}">
+  <div class="changelog-entry-heading">
+    <h2>QuitHide v${version}</h2>
+    <time datetime="${escapeHTML(entry.publishedAt)}">${publishedDate}</time>
+  </div>
+  <p>${notes}</p>
+  <div class="changelog-entry-meta">
+    <span>${isChinese ? "构建版本" : "Build"} ${entry.build}</span>
+    <span>macOS ${escapeHTML(entry.minimumSystemVersion)}+</span>
+    <a href="${releaseURL}">${isChinese ? "GitHub Release" : "GitHub release"}</a>
+  </div>
+</article>`;
+  }).join("\n");
 }
 
 function softwareJSONLD(value, baseURL, language) {

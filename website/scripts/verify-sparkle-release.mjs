@@ -6,6 +6,10 @@ import {
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  renderSparkleReleaseNotesHTML,
+  validateReleaseHistory,
+} from "../lib/release-history-core.mjs";
 
 const feedSignaturePrefix = Buffer.from("<!-- sparkle-signatures:\n", "utf8");
 const feedSignatureSuffix = Buffer.from("-->", "utf8");
@@ -61,7 +65,14 @@ export async function verifySparkleRelease(options) {
     "appcast feed",
   );
 
-  const item = currentItem(signedFeed.content.toString("utf8"), manifest);
+  const appcastXML = signedFeed.content.toString("utf8");
+  const item = currentItem(appcastXML, manifest);
+  if (options.releaseHistory) {
+    const history = JSON.parse(await readFile(options.releaseHistory, "utf8"));
+    const releases = validateReleaseHistory(history, { manifest });
+    verifyAdaptiveReleaseNotes(item, history, manifest);
+    verifyPreviousReleaseIsRetained(appcastXML, releases);
+  }
   const enclosure = enclosureAttributes(item);
   if (enclosure.url !== expectedDownloadURL) {
     throw new Error(`Unexpected appcast download URL: ${enclosure.url}`);
@@ -194,7 +205,7 @@ function extractSignedFeed(appcast) {
 }
 
 function currentItem(xml, manifest) {
-  const items = xml.match(/<item\b[\s\S]*?<\/item>/g) || [];
+  const items = appcastItems(xml);
   const matches = items.filter((item) => (
     tagValue(item, "sparkle:version") === String(manifest.build)
     && tagValue(item, "sparkle:shortVersionString") === manifest.version
@@ -209,6 +220,38 @@ function currentItem(xml, manifest) {
   return matches[0];
 }
 
+function appcastItems(xml) {
+  return xml.match(/<item\b[\s\S]*?<\/item>/g) || [];
+}
+
+function verifyAdaptiveReleaseNotes(item, history, manifest) {
+  const match = item.match(/<description\b([^>]*)>([\s\S]*?)<\/description>/);
+  if (!match) throw new Error("Current appcast item has no embedded release notes");
+  const attributes = elementAttributes(match[1]);
+  if (attributes["sparkle:format"] && attributes["sparkle:format"] !== "html") {
+    throw new Error("Adaptive Sparkle release notes must use HTML");
+  }
+  let contents = match[2].trim();
+  if (contents.startsWith("<![CDATA[") && contents.endsWith("]]>")) {
+    contents = contents.slice("<![CDATA[".length, -"]]>".length);
+  }
+  const expected = renderSparkleReleaseNotesHTML(history, manifest);
+  if (contents.trim() !== expected.trim()) {
+    throw new Error("Current appcast item does not contain the verified cumulative release notes");
+  }
+}
+
+function verifyPreviousReleaseIsRetained(xml, releases) {
+  if (releases.length < 2) return;
+  const expectedBuild = String(releases.at(-2).build);
+  const matches = appcastItems(xml).filter(
+    (item) => tagValue(item, "sparkle:version") === expectedBuild,
+  );
+  if (matches.length !== 1) {
+    throw new Error(`Signed appcast must retain previous build ${expectedBuild}`);
+  }
+}
+
 function tagValue(xml, name) {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = xml.match(new RegExp(`<${escapedName}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapedName}>`));
@@ -218,13 +261,18 @@ function tagValue(xml, name) {
 function enclosureAttributes(item) {
   const match = item.match(/<enclosure\b([^>]*)\/?\s*>/);
   if (!match) throw new Error("Current appcast item has no enclosure");
-  const attributes = {};
-  const pattern = /([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-  for (const attribute of match[1].matchAll(pattern)) {
-    attributes[attribute[1]] = decodeXML(attribute[2] ?? attribute[3]);
-  }
+  const attributes = elementAttributes(match[1]);
   for (const name of ["url", "length", "type", "sparkle:edSignature"]) {
     if (!attributes[name]) throw new Error(`Appcast enclosure is missing ${name}`);
+  }
+  return attributes;
+}
+
+function elementAttributes(value) {
+  const attributes = {};
+  const pattern = /([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+  for (const attribute of value.matchAll(pattern)) {
+    attributes[attribute[1]] = decodeXML(attribute[2] ?? attribute[3]);
   }
   return attributes;
 }

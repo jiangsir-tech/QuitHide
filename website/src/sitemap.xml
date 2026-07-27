@@ -10,4 +10,14 @@
     <xhtml:link rel="alternate" hreflang="zh-CN" href="{{SITE_URL}}/" />
     <xhtml:link rel="alternate" hreflang="en" href="{{SITE_URL}}/en/" />
   </url>
+  <url>
+    <loc>{{SITE_URL}}/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="{{SITE_URL}}/changelog/" />
+    <xhtml:link rel="alternate" hreflang="en" href="{{SITE_URL}}/en/changelog/" />
+  </url>
+  <url>
+    <loc>{{SITE_URL}}/en/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="{{SITE_URL}}/changelog/" />
+    <xhtml:link rel="alternate" hreflang="en" href="{{SITE_URL}}/en/changelog/" />
+  </url>
 </urlset>

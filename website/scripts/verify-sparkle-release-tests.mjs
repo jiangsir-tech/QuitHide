@@ -8,6 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { verifySparkleRelease } from "./verify-sparkle-release.mjs";
 import { verifyReleaseProgression } from "./verify-release-progression.mjs";
+import { renderSparkleReleaseNotesHTML } from "../lib/release-history-core.mjs";
 
 const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "quithide-sparkle-test-"));
 
@@ -22,6 +23,7 @@ try {
   const checksumPath = path.join(temporaryDirectory, checksumName);
   const appcastPath = path.join(temporaryDirectory, appcastName);
   const manifestPath = path.join(temporaryDirectory, "update.json");
+  const releaseHistoryPath = path.join(temporaryDirectory, "release-history.json");
   const releasePath = path.join(temporaryDirectory, "release.json");
   const publicFeedPath = path.join(temporaryDirectory, "public-release.json");
   const downloadBaseURL = "https://downloads.example.com";
@@ -40,6 +42,32 @@ try {
     releaseNotesEn: "Tests the secure update publishing flow.",
     downloadURL: `https://github.com/jiangsir-tech/QuitHide/releases/tag/${tag}`,
   };
+  const releaseHistory = {
+    schemaVersion: 1,
+    releases: [
+      {
+        version: "9.8.6",
+        build: 986,
+        minimumSystemVersion: "13.0",
+        publishedAt: "2026-01-01T00:00:00Z",
+        releaseNotes: {
+          "zh-CN": "上一个稳定版本。",
+          en: "The previous stable release.",
+        },
+      },
+      {
+        version,
+        build,
+        minimumSystemVersion: "13.0",
+        publishedAt: "2026-01-02T00:00:00Z",
+        releaseNotes: {
+          "zh-CN": manifest.releaseNotes,
+          en: manifest.releaseNotesEn,
+        },
+      },
+    ],
+  };
+  const adaptiveReleaseNotes = renderSparkleReleaseNotesHTML(releaseHistory, manifest);
   const feedContent = Buffer.from(`<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
   <channel>
@@ -48,7 +76,14 @@ try {
       <sparkle:version>${build}</sparkle:version>
       <sparkle:shortVersionString>${version}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[${adaptiveReleaseNotes}]]></description>
       <enclosure url="${downloadBaseURL}/releases/${tag}/${dmgName}" length="${dmg.length}" type="application/octet-stream" sparkle:edSignature="${archiveSignature}" />
+    </item>
+    <item>
+      <title>Version 9.8.6</title>
+      <sparkle:version>986</sparkle:version>
+      <sparkle:shortVersionString>9.8.6</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
     </item>
   </channel>
 </rss>
@@ -63,6 +98,7 @@ try {
   await writeFile(checksumPath, `${sha256}  ${dmgName}\n`);
   await writeFile(appcastPath, signedFeed);
   await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+  await writeFile(releaseHistoryPath, `${JSON.stringify(releaseHistory)}\n`);
   await writeFile(releasePath, `${JSON.stringify({
     tag_name: tag,
     draft: true,
@@ -88,6 +124,7 @@ try {
     dmg: dmgPath,
     checksum: checksumPath,
     appcast: appcastPath,
+    releaseHistory: releaseHistoryPath,
     downloadBaseUrl: downloadBaseURL,
     publicKey: publicKeyBase64,
     release: releasePath,
@@ -136,13 +173,45 @@ try {
       dmg: dmgPath,
       checksum: checksumPath,
       appcast: appcastPath,
+      releaseHistory: releaseHistoryPath,
       downloadBaseUrl: downloadBaseURL,
       publicKey: publicKeyBase64,
     }),
     "tampered appcast",
   );
 
-  console.log("PASS: signed Sparkle release and monotonic-version guards");
+  const incompleteFeedContent = Buffer.from(
+    feedContent.toString("utf8").replace(
+      adaptiveReleaseNotes,
+      "<p>Only the newest release.</p>",
+    ),
+    "utf8",
+  );
+  const incompleteFeedSignature = sign(
+    null,
+    incompleteFeedContent,
+    privateKey,
+  ).toString("base64");
+  await writeFile(appcastPath, Buffer.concat([
+    incompleteFeedContent,
+    Buffer.from(
+      `<!-- sparkle-signatures:\nedSignature: ${incompleteFeedSignature}\nlength: ${incompleteFeedContent.length}\n-->\n`,
+    ),
+  ]));
+  await expectFailure(
+    () => verifySparkleRelease({
+      manifest: manifestPath,
+      dmg: dmgPath,
+      checksum: checksumPath,
+      appcast: appcastPath,
+      releaseHistory: releaseHistoryPath,
+      downloadBaseUrl: downloadBaseURL,
+      publicKey: publicKeyBase64,
+    }),
+    "incomplete cumulative release notes",
+  );
+
+  console.log("PASS: signed Sparkle release, cumulative notes, retention, and monotonic-version guards");
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

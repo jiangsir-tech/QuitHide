@@ -87,6 +87,7 @@ if [[ -e "$DMG_PATH" || -e "$CHECKSUM_PATH" || -e "$APPCAST_PATH" ]]; then
         PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$INFO_PLIST")"
         /usr/bin/env node "$PROJECT_DIR/website/scripts/verify-sparkle-release.mjs" \
             --manifest "$PROJECT_DIR/update.json" \
+            --release-history "$PROJECT_DIR/release-history.json" \
             --dmg "$DMG_PATH" \
             --checksum "$CHECKSUM_PATH" \
             --appcast "$APPCAST_PATH" \

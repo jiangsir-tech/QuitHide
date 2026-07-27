@@ -4054,7 +4054,6 @@ struct MenuContentView: View {
             }
         }
         .frame(width: 410, height: menuHeight, alignment: .top)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.92))
         .environment(\.locale, model.effectiveLocale)
         .animation(.easeOut(duration: 0.18), value: updateController.pendingUpdateVersion)
         .alert(item: $pendingForceQuitRequest) { request in

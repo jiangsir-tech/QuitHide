@@ -158,6 +158,19 @@ h1 { margin: 0; font-size: clamp(62px, 8vw, 92px); line-height: 0.98; letter-spa
 .checksum code { display: block; padding: 13px; overflow-wrap: anywhere; border: 1px solid var(--line); border-radius: 10px; background: var(--page); color: var(--code-text); font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .release-links { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 22px; color: var(--blue); font-size: 14px; font-weight: 650; }
 
+.changelog-hero { padding: 92px 0 72px; }
+.changelog-hero h1 { font-size: clamp(48px, 7vw, 76px); line-height: 1; }
+.changelog-hero p:last-child { max-width: 700px; margin: 24px 0 0; color: var(--muted); font-size: 18px; }
+.changelog-list { max-width: 860px; }
+.changelog-entry { padding: 0 0 42px; }
+.changelog-entry + .changelog-entry { padding-top: 42px; border-top: 1px solid var(--line); }
+.changelog-entry-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; }
+.changelog-entry h2 { margin: 0; font-size: clamp(27px, 4vw, 36px); letter-spacing: -0.035em; }
+.changelog-entry time { flex-shrink: 0; color: var(--subtle); font-size: 13px; }
+.changelog-entry > p { margin: 16px 0 0; color: var(--muted); }
+.changelog-entry-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 18px; color: var(--subtle); font-size: 13px; }
+.changelog-entry-meta a { color: var(--blue); font-weight: 650; }
+
 .faq-list { max-width: 860px; margin-top: 38px; border-top: 1px solid var(--line); }
 .faq-list details { border-bottom: 1px solid var(--line); }
 .faq-list summary { position: relative; padding: 22px 36px 22px 0; cursor: pointer; list-style: none; font-weight: 680; }
@@ -201,6 +214,8 @@ footer { padding: 30px 0; border-top: 1px solid var(--line); color: var(--muted)
   .feature-grid { grid-template-columns: 1fr; gap: 28px; }
   .release-meta { grid-template-columns: 1fr; }
   .release-card { padding: 22px; }
+  .changelog-hero { padding: 62px 0 50px; }
+  .changelog-entry-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
   .download { padding: 62px 0; }
   .footer-inner { flex-direction: column; }
 }

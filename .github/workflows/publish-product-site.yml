@@ -84,6 +84,7 @@ jobs:
             exit 1
           fi
           git show "$release_commit:update.json" > "$RUNNER_TEMP/update.json"
+          git show "$release_commit:release-history.json" > "$RUNNER_TEMP/release-history.json"
           git show "$release_commit:Resources/Info.plist" > "$RUNNER_TEMP/Info.plist"
 
           version="$(jq -r '.version' "$RUNNER_TEMP/update.json")"
@@ -161,7 +162,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node website/scripts/verify-sparkle-release.mjs --manifest "$RUNNER_TEMP/update.json" --dmg "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}" --checksum "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}" --appcast "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" --download-base-url "$QUITHIDE_DOWNLOAD_BASE_URL" --public-key "$QUITHIDE_SPARKLE_PUBLIC_KEY" --release "$RUNNER_TEMP/release-api.json" --release-state either
+          node website/scripts/verify-sparkle-release.mjs --manifest "$RUNNER_TEMP/update.json" --release-history "$RUNNER_TEMP/release-history.json" --dmg "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}" --checksum "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}" --appcast "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" --download-base-url "$QUITHIDE_DOWNLOAD_BASE_URL" --public-key "$QUITHIDE_SPARKLE_PUBLIC_KEY" --release "$RUNNER_TEMP/release-api.json" --release-state either
           if [[ "${{ steps.release.outputs.progression_mode }}" == "retry" ]]; then
             if [[ ! -f website/src/appcast.xml ]] ||
                ! cmp -s "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" website/src/appcast.xml; then
@@ -320,8 +321,9 @@ jobs:
           dmg="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.dmg_name }}"
           checksum="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.checksum_name }}"
           appcast="$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}"
-          node website/scripts/verify-sparkle-release.mjs --manifest "$RUNNER_TEMP/update.json" --dmg "$dmg" --checksum "$checksum" --appcast "$appcast" --download-base-url "$QUITHIDE_DOWNLOAD_BASE_URL" --public-key "$QUITHIDE_SPARKLE_PUBLIC_KEY" --release "$RUNNER_TEMP/published-release-api.json" --release-state published
+          node website/scripts/verify-sparkle-release.mjs --manifest "$RUNNER_TEMP/update.json" --release-history "$RUNNER_TEMP/release-history.json" --dmg "$dmg" --checksum "$checksum" --appcast "$appcast" --download-base-url "$QUITHIDE_DOWNLOAD_BASE_URL" --public-key "$QUITHIDE_SPARKLE_PUBLIC_KEY" --release "$RUNNER_TEMP/published-release-api.json" --release-state published
           node website/scripts/create-release-feed.mjs --release "$RUNNER_TEMP/published-release-api.json" --manifest "$RUNNER_TEMP/update.json" --dmg "$dmg" --checksum "$checksum" --fallback-feed website/release.json --output "$RUNNER_TEMP/release.json"
+          node website/scripts/sync-release-history-published-at.mjs --history release-history.json --manifest "$RUNNER_TEMP/update.json" --release "$RUNNER_TEMP/published-release-api.json" --output release-history.json
 
           cp "$RUNNER_TEMP/update.json" update.json
           cp "$RUNNER_TEMP/release.json" website/release.json
@@ -367,7 +369,7 @@ jobs:
           cp "$RUNNER_TEMP/release.json" website/release.json
           cp "$RUNNER_TEMP/quithide-release/${{ steps.release.outputs.appcast_name }}" website/src/appcast.xml
           npm --prefix website test
-          git add update.json website/release.json website/src/appcast.xml
+          git add update.json release-history.json website/release.json website/src/appcast.xml
           if git diff --cached --quiet; then
             echo "The public feeds already contain this release."
           else

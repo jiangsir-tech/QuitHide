@@ -4,6 +4,8 @@ set -euo pipefail
 PROJECT_DIR="${0:A:h:h}"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 MANIFEST_PATH="$PROJECT_DIR/update.json"
+RELEASE_HISTORY_PATH="$PROJECT_DIR/release-history.json"
+RELEASE_NOTES_GENERATOR="$PROJECT_DIR/website/scripts/create-sparkle-release-notes.mjs"
 DIST_DIR="$PROJECT_DIR/dist"
 /bin/mkdir -p "$DIST_DIR"
 DOWNLOAD_BASE_URL="${QUITHIDE_DOWNLOAD_BASE_URL:-https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com}"
@@ -77,29 +79,23 @@ fi
 
 /bin/cp "$DMG_PATH" "$STAGING_DIR/$DMG_NAME"
 if [[ -f "$PROJECT_DIR/website/src/appcast.xml" ]]; then
-    /bin/cp "$PROJECT_DIR/website/src/appcast.xml" "$STAGING_DIR/appcast.xml"
+    # generate_appcast reuses only the exact output path passed with -o.
+    # Seed that versioned path so older feed items survive the next release.
+    /bin/cp "$PROJECT_DIR/website/src/appcast.xml" "$STAGING_DIR/$APPCAST_NAME"
 fi
 
-/usr/bin/python3 - "$MANIFEST_PATH" "$STAGING_DIR/${DMG_NAME:r}.md" <<'PY'
-import json
-import pathlib
-import sys
-
-manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-notes = (
-    f"## QuitHide {manifest['version']}\n\n"
-    f"### 简体中文\n\n{manifest['releaseNotes'].strip()}\n\n"
-    f"### English\n\n{manifest['releaseNotesEn'].strip()}\n"
-)
-pathlib.Path(sys.argv[2]).write_text(notes, encoding="utf-8")
-PY
+/usr/bin/env node "$RELEASE_NOTES_GENERATOR" \
+    --history "$RELEASE_HISTORY_PATH" \
+    --manifest "$MANIFEST_PATH" \
+    --output "$STAGING_DIR/${DMG_NAME:r}.html"
 
 (
     cd "$STAGING_DIR"
     "$GENERATE_APPCAST" \
         --account "$SPARKLE_ACCOUNT" \
         --download-url-prefix "$DOWNLOAD_BASE_URL/releases/$TAG_NAME/" \
-        --maximum-versions 3 \
+        --full-release-notes-url "https://quithide.com/changelog/" \
+        --maximum-versions 5 \
         --maximum-deltas 0 \
         --embed-release-notes \
         -o "$APPCAST_NAME" \
@@ -115,6 +111,7 @@ fi
     --dmg "$DMG_PATH" \
     --checksum "$CHECKSUM_PATH" \
     --appcast "$STAGING_DIR/$APPCAST_NAME" \
+    --release-history "$RELEASE_HISTORY_PATH" \
     --download-base-url "$DOWNLOAD_BASE_URL" \
     --public-key "$BUNDLE_PUBLIC_KEY" >/dev/null
 

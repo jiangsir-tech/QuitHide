@@ -1,13 +1,26 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { escapeHTML } from "../lib/release-history-core.mjs";
 import "./build.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const outputDirectory = path.resolve(scriptDirectory, "../dist");
 const release = JSON.parse(await readFile(path.join(outputDirectory, "release.json"), "utf8"));
+const releaseHistory = JSON.parse(
+  await readFile(path.join(outputDirectory, "release-history.json"), "utf8"),
+);
 const chinese = await readFile(path.join(outputDirectory, "index.html"), "utf8");
 const english = await readFile(path.join(outputDirectory, "en/index.html"), "utf8");
+const chineseChangelog = await readFile(
+  path.join(outputDirectory, "changelog/index.html"),
+  "utf8",
+);
+const englishChangelog = await readFile(
+  path.join(outputDirectory, "en/changelog/index.html"),
+  "utf8",
+);
+const sitemap = await readFile(path.join(outputDirectory, "sitemap.xml"), "utf8");
 const styles = await readFile(path.join(outputDirectory, "styles.css"), "utf8");
 const edgeOne = JSON.parse(await readFile(path.resolve(outputDirectory, "../edgeone.json"), "utf8"));
 const chineseText = chinese.replace(/<[^>]+>/g, "");
@@ -44,6 +57,44 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
   verifyThemeMetadata(label, content);
   verifyDirectDownloadLinks(label, content, release.file.directDownloadURL);
   verifyHeroDownloadMetadataLayout(label, content);
+}
+
+for (const [label, content, language] of [
+  ["Chinese changelog", chineseChangelog, "zh-CN"],
+  ["English changelog", englishChangelog, "en"],
+]) {
+  if (content.includes("{{")) throw new Error(`${label} contains unresolved tokens`);
+  let previousIndex = -1;
+  for (const entry of [...releaseHistory.releases].reverse()) {
+    const versionIndex = content.indexOf(`QuitHide v${entry.version}`);
+    if (versionIndex <= previousIndex) {
+      throw new Error(`${label} must list every version newest first`);
+    }
+    previousIndex = versionIndex;
+    if (!content.includes(escapeHTML(entry.releaseNotes[language]))) {
+      throw new Error(`${label} is missing release notes for v${entry.version}`);
+    }
+    if (
+      !content.includes(
+        `https://github.com/jiangsir-tech/QuitHide/releases/tag/v${entry.version}`,
+      )
+    ) {
+      throw new Error(`${label} is missing the GitHub release for v${entry.version}`);
+    }
+  }
+  verifyThemeMetadata(label, content);
+}
+
+if (!chinese.includes('href="/changelog/"')) {
+  throw new Error("Chinese product page must link to the changelog");
+}
+if (!english.includes('href="/en/changelog/"')) {
+  throw new Error("English product page must link to the changelog");
+}
+for (const route of ["/changelog/", "/en/changelog/"]) {
+  if (!sitemap.includes(`<loc>http://localhost:4173${route}</loc>`)) {
+    throw new Error(`Sitemap is missing ${route}`);
+  }
 }
 
 verifyDownloadCountMarkup(
