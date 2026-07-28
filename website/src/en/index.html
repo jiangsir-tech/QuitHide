@@ -41,7 +41,10 @@
         <a href="#release">Release</a>
         <a href="/en/changelog/">Changelog</a>
         <a href="https://github.com/jiangsir-tech/QuitHide">GitHub</a>
-        <a class="language-link" href="/" lang="zh-CN">简体中文</a>
+        <span class="language-switcher" role="group" aria-label="Choose language">
+          <a class="language-option" href="/" lang="zh-Hans" hreflang="zh-Hans" aria-label="切换到中文">中文</a>
+          <span class="language-option is-current" lang="en" aria-current="page">EN</span>
+        </span>
       </nav>
     </div>
   </header>
@@ -67,7 +70,12 @@
             <strong data-download-count="{{DOWNLOAD_TOTAL_FALLBACK}}">{{DOWNLOAD_TOTAL_FALLBACK}}</strong> cumulative downloads <span aria-hidden="true">·</span> Updated daily
           </p>
         </div>
-        <div class="product-visual"><img src="/images/quithide-menu-en.webp" width="820" height="1024" alt="QuitHide main interface in English"></div>
+        <div class="product-visual">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/images/quithide-menu-en-dark.webp">
+            <img src="/images/quithide-menu-en-light.webp" width="820" height="1024" alt="QuitHide main interface in English">
+          </picture>
+        </div>
       </div>
     </section>
 

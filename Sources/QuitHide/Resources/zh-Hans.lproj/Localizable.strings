@@ -103,6 +103,7 @@
 "status.stage_manager.group_protected" = "台前调度分组保护中";
 "status.stage_manager.unavailable_paused" = "分组识别不可用 · 自动处理已暂停";
 "status.screen_visibility.protected" = "屏幕可见保护中";
+"status.window_protection.waiting_for_stability" = "窗口正在变化 · 自动处理暂时暂停";
 "status.window_protection.unavailable_paused" = "窗口保护识别不可用 · 自动处理已暂停";
 "status.waiting_for_background" = "等待离开前台";
 "status.action.about_to_run" = "即将{action}";
@@ -136,6 +137,7 @@
 "settings.stage_manager_protection.enabled" = "台前调度开启时保护分组中的 App";
 "settings.stage_manager_protection.help" = "分组中包含设为“不处理”的 App 时，不自动隐藏或退出组内其他 App；当台前组合内的 App 全部设置为自动规则时，也会在进入侧边栏后才分别开始计时。仅在台前调度开启时生效。辅助功能权限只用于读取分组，不用于移动或重组窗口。";
 "settings.stage_manager_protection.checking" = "正在识别台前调度分组…";
+"settings.stage_manager_protection.waiting_for_stability" = "窗口正在变化，自动处理暂时暂停";
 "settings.stage_manager_protection.dormant" = "已开启 · 台前调度当前未开启";
 "settings.stage_manager_protection.active" = "已生效 · 当前没有自动规则 App 需要保护";
 "settings.stage_manager_protection.active_count" = "已生效 · 正在保护 {count} 个自动规则 App";
@@ -145,6 +147,7 @@
 "settings.screen_visibility_protection.enabled" = "台前调度关闭时保护屏幕可见 App";
 "settings.screen_visibility_protection.help" = "仅在台前调度关闭时生效。设置了自动规则但屏幕上可见的 App 不会被自动隐藏或退出；窗口完全被其他应用遮住后，才从零开始计时。无须额外权限，也不读取屏幕内容；遮挡按窗口外框计算。";
 "settings.screen_visibility_protection.checking" = "正在判断屏幕窗口可见性…";
+"settings.screen_visibility_protection.waiting_for_stability" = "窗口正在变化，自动处理暂时暂停";
 "settings.screen_visibility_protection.dormant" = "已开启 · 台前调度开启时不使用";
 "settings.screen_visibility_protection.active" = "已生效 · 当前没有自动规则 App 需要保护";
 "settings.screen_visibility_protection.active_count" = "已生效 · 正在保护 {count} 个屏幕可见 App";
@@ -155,6 +158,7 @@
 "settings.about.version" = "版本 {version}";
 "settings.about.notarized" = "正式发布包使用 Developer ID 签名并通过 Apple 公证";
 "settings.update.automatic" = "自动检查更新";
+"settings.website" = "QuitHide 官网";
 "settings.github_project" = "GitHub 项目";
 
 /* Updates */

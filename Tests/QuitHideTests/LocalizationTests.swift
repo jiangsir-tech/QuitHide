@@ -81,6 +81,18 @@ struct AppLanguageResolutionTests {
         ) == .en)
     }
 
+    @Test("The product website follows the app language")
+    func productWebsiteFollowsAppLanguage() {
+        #expect(
+            ResolvedAppLanguage.zhHans.productWebsiteURL.absoluteString ==
+                "https://quithide.com/"
+        )
+        #expect(
+            ResolvedAppLanguage.en.productWebsiteURL.absoluteString ==
+                "https://quithide.com/en/"
+        )
+    }
+
     @Test("An unsupported system language falls back to Simplified Chinese")
     func unsupportedSystemLanguageUsesChineseFallback() {
         #expect(AppLocalization.resolve(
@@ -138,6 +150,8 @@ struct LocalizationResourceTests {
         #expect(english.text(.ruleAutomaticHide) == "Auto Hide")
         #expect(chinese.text(.settingsTitle) == "QuitHide 设置")
         #expect(english.text(.settingsTitle) == "QuitHide Settings")
+        #expect(chinese.text(.settingsWebsite) == "QuitHide 官网")
+        #expect(english.text(.settingsWebsite) == "QuitHide Website")
         #expect(chinese.text(.statusQuitNotCompleted) == "退出未完成")
         #expect(english.text(.statusQuitNotCompleted) == "Quit Not Completed")
         #expect(

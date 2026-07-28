@@ -12,7 +12,10 @@ QuitHide 是一款免费、开源的 macOS 菜单栏工具。你可以为每个 
 
 macOS 13 Ventura 或更高版本 · 支持 Apple Silicon 与 Intel Mac · 简体中文与 English 界面
 
-<img src="assets/quithide-menu-zh-Hans.png" alt="QuitHide 中文主界面" width="410">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/quithide-menu-zh-Hans-dark.png">
+  <img src="assets/quithide-menu-zh-Hans-light.png" alt="QuitHide 中文主界面" width="410">
+</picture>
 
 ## 主要功能
 

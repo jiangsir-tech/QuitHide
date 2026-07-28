@@ -121,6 +121,40 @@ expect(
     ) == .stageManager,
     "Stage Manager on routes exclusively to group protection"
 )
+let transientWindowFailure =
+    AutomaticWindowProtectionFailurePresentationPolicy.recordFailure(
+        previousConsecutiveFailureCount: 0
+    )
+let repeatedWindowFailure =
+    AutomaticWindowProtectionFailurePresentationPolicy.recordFailure(
+        previousConsecutiveFailureCount:
+            transientWindowFailure.consecutiveFailureCount
+    )
+expect(
+    transientWindowFailure.presentation == .waitingForStability &&
+        repeatedWindowFailure.presentation == .unavailable,
+    "window protection warns only after consecutive read failures"
+)
+expect(
+    AutomaticWindowProtectionFailurePresentationPolicy.recordFailure(
+        previousConsecutiveFailureCount:
+            repeatedWindowFailure.consecutiveFailureCount
+    ) == repeatedWindowFailure,
+    "window protection warning count saturates"
+)
+var windowFailureTracker =
+    AutomaticWindowProtectionFailurePresentationTracker()
+let repeatedObservationID = UUID()
+expect(
+    windowFailureTracker.recordFailure(
+        observationID: repeatedObservationID
+    ) == .waitingForStability &&
+        windowFailureTracker.recordFailure(
+            observationID: repeatedObservationID
+        ) == .waitingForStability &&
+        windowFailureTracker.consecutiveFailureCount == 1,
+    "duplicate window observations do not escalate the warning"
+)
 expect(
     AutomaticWindowProtectionModePolicy.mode(
         stageManagerGroupProtectionEnabled: true,

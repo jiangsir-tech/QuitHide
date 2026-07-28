@@ -62,22 +62,50 @@ private extension String {
     }
 }
 
+enum AppAutomationStatusTone: Equatable {
+    case standard
+    case protected
+    case warning
+    case error
+}
+
+private extension AppAutomationStatusTone {
+    var color: Color {
+        switch self {
+        case .standard: return .secondary
+        case .protected: return .green
+        case .warning: return .orange
+        case .error: return .red
+        }
+    }
+}
+
 struct AppAutomationStatus {
     let text: String
     let isError: Bool
     let isWarning: Bool
+    let isProtected: Bool
     let helpText: String?
 
     init(
         text: String,
         isError: Bool = false,
         isWarning: Bool = false,
+        isProtected: Bool = false,
         helpText: String? = nil
     ) {
         self.text = text
         self.isError = isError
         self.isWarning = isWarning
+        self.isProtected = isProtected
         self.helpText = helpText
+    }
+
+    var tone: AppAutomationStatusTone {
+        if isError { return .error }
+        if isWarning { return .warning }
+        if isProtected { return .protected }
+        return .standard
     }
 }
 
@@ -96,6 +124,7 @@ struct SettingsWarningItem: Identifiable {
 enum StageManagerGroupProtectionStatus: Equatable {
     case off
     case checking
+    case waitingForStability
     case dormant
     case active(protectedAutomaticAppCount: Int)
     case permissionRequired
@@ -105,6 +134,7 @@ enum StageManagerGroupProtectionStatus: Equatable {
 enum ScreenVisibilityProtectionStatus: Equatable {
     case off
     case checking
+    case waitingForStability
     case dormant
     case active(protectedAutomaticAppCount: Int)
     case unavailable
@@ -261,6 +291,10 @@ final class AppModel: ObservableObject {
     private var screenVisibilityReadStartedAt: TimeInterval?
     private var lastAppliedAutomaticProtectionObservationID: UUID?
     private var automaticWindowProtectionIsUnavailable = false
+    private var stageManagerProtectionReadFailureTracker =
+        AutomaticWindowProtectionFailurePresentationTracker()
+    private var screenVisibilityProtectionReadFailureTracker =
+        AutomaticWindowProtectionFailurePresentationTracker()
     private var automaticWindowProtectionGeneration = 0
     private var workspaceSessionIsActive = true
     private var timer: Timer?
@@ -596,6 +630,7 @@ final class AppModel: ObservableObject {
     func setStageManagerGroupProtectionEnabled(_ enabled: Bool) {
         guard stageManagerGroupProtectionEnabled != enabled else { return }
         invalidateAutomaticWindowProtectionRead()
+        resetStageManagerProtectionReadFailures()
         stageManagerGroupProtectionEnabled = enabled
 
         if enabled {
@@ -622,6 +657,7 @@ final class AppModel: ObservableObject {
     func setScreenVisibilityProtectionEnabled(_ enabled: Bool) {
         guard screenVisibilityProtectionEnabled != enabled else { return }
         invalidateAutomaticWindowProtectionRead()
+        resetScreenVisibilityProtectionReadFailures()
         screenVisibilityProtectionEnabled = enabled
         defaults.set(enabled, forKey: Keys.screenVisibilityProtectionEnabled)
         screenVisibilityProtectionStatus = enabled ? .checking : .off
@@ -630,6 +666,7 @@ final class AppModel: ObservableObject {
 
     func requestStageManagerAccessibilityPermission() {
         guard stageManagerGroupProtectionEnabled else { return }
+        resetStageManagerProtectionReadFailures()
         stageManagerGroupProtectionStatus = .checking
         StageManagerAccessibility.requestPermission()
         invalidateAutomaticWindowProtectionRead()
@@ -642,6 +679,15 @@ final class AppModel: ObservableObject {
 
     var automaticWindowProcessingIsUnavailable: Bool {
         automaticWindowProtectionIsUnavailable
+    }
+
+    private var automaticWindowProtectionIsWaitingForStability: Bool {
+        guard stageManagerGroupProtectionStatus != .unavailable,
+              screenVisibilityProtectionStatus != .unavailable else {
+            return false
+        }
+        return stageManagerGroupProtectionStatus == .waitingForStability ||
+            screenVisibilityProtectionStatus == .waitingForStability
     }
 
     func automationStatus(for item: RunningAppItem) -> AppAutomationStatus? {
@@ -724,12 +770,16 @@ final class AppModel: ObservableObject {
                     : .statusStageManagerGroupProtected
             return AppAutomationStatus(
                 text: localized(statusKey),
-                isError: false
+                isProtected: true
             )
         }
         if automaticWindowProcessingIsUnavailable {
+            let statusKey: L10n.Key =
+                automaticWindowProtectionIsWaitingForStability
+                    ? .statusWindowProtectionWaitingForStability
+                    : .statusWindowProtectionUnavailablePaused
             return AppAutomationStatus(
-                text: localized(.statusWindowProtectionUnavailablePaused),
+                text: localized(statusKey),
                 isError: false
             )
         }
@@ -1563,6 +1613,8 @@ final class AppModel: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.workspaceSessionIsActive = false
+                self.resetStageManagerProtectionReadFailures()
+                self.resetScreenVisibilityProtectionReadFailures()
                 self.invalidateAutomaticWindowProtectionRead()
                 self.suspendTiming(
                     for: .systemSessionInactive,
@@ -1580,7 +1632,16 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 let eventInstant = self.automationClock.now
                 self.workspaceSessionIsActive = true
+                self.resetStageManagerProtectionReadFailures()
+                self.resetScreenVisibilityProtectionReadFailures()
                 if self.automaticWindowProtectionIsConfigured {
+                    if self.stageManagerGroupProtectionEnabled,
+                       self.stageManagerGroupProtectionStatus != .permissionRequired {
+                        self.stageManagerGroupProtectionStatus = .checking
+                    }
+                    if self.screenVisibilityProtectionEnabled {
+                        self.screenVisibilityProtectionStatus = .checking
+                    }
                     self.invalidateAutomaticWindowProtectionRead()
                     self.automaticWindowProtectionIsUnavailable = true
                     self.suspendTiming(
@@ -1955,6 +2016,19 @@ final class AppModel: ObservableObject {
         let eventInstant = automationClock.now
         pendingAutomaticProtectionReleaseCandidate = nil
         automaticWindowProtectionIsUnavailable = true
+        switch activeAutomaticWindowProtectionMode {
+        case .stageManager:
+            if stageManagerGroupProtectionStatus != .unavailable,
+               stageManagerGroupProtectionStatus != .permissionRequired {
+                stageManagerGroupProtectionStatus = .waitingForStability
+            }
+        case .screenVisibility:
+            if screenVisibilityProtectionStatus != .unavailable {
+                screenVisibilityProtectionStatus = .waitingForStability
+            }
+        case .legacy, .unavailable:
+            break
+        }
         suspendTiming(
             for: .automaticWindowProtectionUnavailable,
             at: eventInstant
@@ -2087,6 +2161,34 @@ final class AppModel: ObservableObject {
         stageManagerGroupProtectionEnabled || screenVisibilityProtectionEnabled
     }
 
+    private func resetStageManagerProtectionReadFailures() {
+        stageManagerProtectionReadFailureTracker.reset()
+    }
+
+    private func resetScreenVisibilityProtectionReadFailures() {
+        screenVisibilityProtectionReadFailureTracker.reset()
+    }
+
+    private func stageManagerProtectionReadFailureStatus(
+        observationID: UUID
+    ) -> StageManagerGroupProtectionStatus {
+        return stageManagerProtectionReadFailureTracker.recordFailure(
+            observationID: observationID
+        ) == .waitingForStability
+            ? .waitingForStability
+            : .unavailable
+    }
+
+    private func screenVisibilityProtectionReadFailureStatus(
+        observationID: UUID
+    ) -> ScreenVisibilityProtectionStatus {
+        return screenVisibilityProtectionReadFailureTracker.recordFailure(
+            observationID: observationID
+        ) == .waitingForStability
+            ? .waitingForStability
+            : .unavailable
+    }
+
     private func scheduleAutomaticWindowProtectionRefresh() {
         guard automaticWindowProtectionIsConfigured else { return }
         Task { @MainActor [weak self] in
@@ -2114,6 +2216,8 @@ final class AppModel: ObservableObject {
 
     private func automaticWindowProtectionSettingsDidChange() {
         pendingAutomaticProtectionReleaseCandidate = nil
+        resetStageManagerProtectionReadFailures()
+        resetScreenVisibilityProtectionReadFailures()
         guard automaticWindowProtectionIsConfigured else {
             automaticWindowProtectionIsUnavailable = false
             activeAutomaticWindowProtectionMode = .legacy
@@ -2269,6 +2373,8 @@ final class AppModel: ObservableObject {
     private func refreshAutomaticWindowProtection() async -> Bool {
         guard workspaceSessionIsActive else { return false }
         guard automaticWindowProtectionIsConfigured else {
+            resetStageManagerProtectionReadFailures()
+            resetScreenVisibilityProtectionReadFailures()
             stageManagerGroupProtectionStatus = .off
             screenVisibilityProtectionStatus = .off
             automaticWindowProtectionIsUnavailable = false
@@ -2309,6 +2415,8 @@ final class AppModel: ObservableObject {
                 return !automaticWindowProtectionIsUnavailable
             }
             activeAutomaticWindowProtectionMode = .legacy
+            resetStageManagerProtectionReadFailures()
+            resetScreenVisibilityProtectionReadFailures()
             acceptedScreenVisibilityFingerprint = nil
             automaticWindowProtectionIsUnavailable = false
             applyAutomaticallyProtectedBundleIdentifiers(
@@ -2328,6 +2436,7 @@ final class AppModel: ObservableObject {
             return true
 
         case .stageManager:
+            resetScreenVisibilityProtectionReadFailures()
             let groupingRead = await readStageManagerGroupingState()
             guard generation == automaticWindowProtectionGeneration,
                   stageManagerGroupProtectionEnabled else {
@@ -2351,6 +2460,7 @@ final class AppModel: ObservableObject {
 
             switch evaluation {
             case let .evaluated(reasonsByBundleIdentifier):
+                resetStageManagerProtectionReadFailures()
                 automaticWindowProtectionIsUnavailable = false
                 applyAutomaticallyProtectedBundleIdentifiers(
                     Set(reasonsByBundleIdentifier.keys),
@@ -2370,9 +2480,15 @@ final class AppModel: ObservableObject {
                     for: .automaticWindowProtectionUnavailable,
                     at: groupingRead.startedAt
                 )
-                stageManagerGroupProtectionStatus = reason == .permissionRequired
-                    ? .permissionRequired
-                    : .unavailable
+                if reason == .permissionRequired {
+                    resetStageManagerProtectionReadFailures()
+                    stageManagerGroupProtectionStatus = .permissionRequired
+                } else {
+                    stageManagerGroupProtectionStatus =
+                        stageManagerProtectionReadFailureStatus(
+                            observationID: groupingRead.observationID
+                        )
+                }
                 return false
             case .legacy:
                 automaticWindowProtectionIsUnavailable = true
@@ -2380,7 +2496,10 @@ final class AppModel: ObservableObject {
                     for: .automaticWindowProtectionUnavailable,
                     at: groupingRead.startedAt
                 )
-                stageManagerGroupProtectionStatus = .unavailable
+                stageManagerGroupProtectionStatus =
+                    stageManagerProtectionReadFailureStatus(
+                        observationID: groupingRead.observationID
+                    )
                 return false
             }
             resumeTiming(
@@ -2390,13 +2509,14 @@ final class AppModel: ObservableObject {
             return true
 
         case .screenVisibility:
+            resetStageManagerProtectionReadFailures()
             stageManagerGroupProtectionStatus = stageManagerGroupProtectionEnabled
                 ? .dormant
                 : .off
             switch screenVisibilityProtectionStatus {
-            case .off, .dormant, .unavailable:
+            case .off, .dormant:
                 screenVisibilityProtectionStatus = .checking
-            case .checking, .active:
+            case .checking, .waitingForStability, .active, .unavailable:
                 break
             }
             let visibilityRead = await readScreenVisibilityState()
@@ -2427,7 +2547,11 @@ final class AppModel: ObservableObject {
                         )
                     )
                 )
-                screenVisibilityProtectionStatus = .unavailable
+                screenVisibilityProtectionStatus =
+                    screenVisibilityProtectionReadFailureStatus(
+                        observationID: visibilityRead.observationID
+                    )
+                invalidateAutomaticWindowProtectionRead()
                 scheduleAutomaticWindowProtectionRefresh()
                 return false
             }
@@ -2440,6 +2564,7 @@ final class AppModel: ObservableObject {
             activeAutomaticWindowProtectionMode = .screenVisibility
             switch visibilityRead.state {
             case let .available(snapshot, fingerprint):
+                resetScreenVisibilityProtectionReadFailures()
                 let automaticBundleIdentifiers = Set(apps.compactMap { item in
                     effectivePolicy(for: item.bundleIdentifier).isAutomated
                         ? item.bundleIdentifier
@@ -2467,7 +2592,10 @@ final class AppModel: ObservableObject {
                     for: .automaticWindowProtectionUnavailable,
                     at: visibilityRead.startedAt
                 )
-                screenVisibilityProtectionStatus = .unavailable
+                screenVisibilityProtectionStatus =
+                    screenVisibilityProtectionReadFailureStatus(
+                        observationID: visibilityRead.observationID
+                    )
                 return false
             }
             resumeTiming(
@@ -2491,11 +2619,21 @@ final class AppModel: ObservableObject {
                 at: systemStateRead.startedAt
             )
             stageManagerGroupProtectionStatus = stageManagerGroupProtectionEnabled
-                ? .unavailable
+                ? stageManagerProtectionReadFailureStatus(
+                    observationID: systemStateRead.observationID
+                )
                 : .off
+            if !stageManagerGroupProtectionEnabled {
+                resetStageManagerProtectionReadFailures()
+            }
             screenVisibilityProtectionStatus = screenVisibilityProtectionEnabled
-                ? .unavailable
+                ? screenVisibilityProtectionReadFailureStatus(
+                    observationID: systemStateRead.observationID
+                )
                 : .off
+            if !screenVisibilityProtectionEnabled {
+                resetScreenVisibilityProtectionReadFailures()
+            }
             return false
         }
     }
@@ -2910,6 +3048,7 @@ struct AppRow: View {
                         "count": String(item.runningInstances.count),
                         "status": firstStatus.text
                     ]),
+                    isProtected: statuses.allSatisfy(\.isProtected),
                     helpText: firstStatus.helpText
                 )
             }
@@ -2949,11 +3088,7 @@ struct AppRow: View {
                 if let status = displayStatus {
                     Text(status.text)
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(
-                            status.isError
-                                ? Color.red
-                                : status.isWarning ? Color.orange : Color.secondary
-                        )
+                        .foregroundStyle(status.tone.color)
                         .lineLimit(1)
                         .help(status.helpText ?? status.text)
                 }
@@ -3095,6 +3230,14 @@ struct SettingsSheet: View {
                 "arrow.triangle.2.circlepath",
                 .secondary
             )
+        case .waitingForStability:
+            return (
+                model.localized(
+                    .settingsStageManagerProtectionWaitingForStability
+                ),
+                "arrow.triangle.2.circlepath",
+                .secondary
+            )
         case .dormant:
             return (
                 model.localized(.settingsStageManagerProtectionDormant),
@@ -3135,6 +3278,14 @@ struct SettingsSheet: View {
         case .checking:
             return (
                 model.localized(.settingsScreenVisibilityProtectionChecking),
+                "arrow.triangle.2.circlepath",
+                .secondary
+            )
+        case .waitingForStability:
+            return (
+                model.localized(
+                    .settingsScreenVisibilityProtectionWaitingForStability
+                ),
                 "arrow.triangle.2.circlepath",
                 .secondary
             )
@@ -3437,10 +3588,20 @@ struct SettingsSheet: View {
                     .suppressFocusEffect()
                 }
 
-                Link(
-                    model.localized(.settingsGitHubProject),
-                    destination: URL(string: "https://github.com/jiangsir-tech/QuitHide")!
-                )
+                HStack(spacing: 8) {
+                    Link(
+                        model.localized(.settingsWebsite),
+                        destination: model.resolvedLanguage.productWebsiteURL
+                    )
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Link(
+                        model.localized(.settingsGitHubProject),
+                        destination: URL(
+                            string: "https://github.com/jiangsir-tech/QuitHide"
+                        )!
+                    )
+                }
                 .font(.caption)
             }
         }

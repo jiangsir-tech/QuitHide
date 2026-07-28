@@ -12,7 +12,10 @@ For people looking for an alternative to [Quitter](https://marco.org/apps#quitte
 
 macOS 13 Ventura or later · Apple Silicon and Intel Macs · English and Simplified Chinese interface
 
-<img src="assets/quithide-menu-en.png" alt="QuitHide main interface in English" width="410">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/quithide-menu-en-dark.png">
+  <img src="assets/quithide-menu-en-light.png" alt="QuitHide main interface in English" width="410">
+</picture>
 
 ## What it does
 

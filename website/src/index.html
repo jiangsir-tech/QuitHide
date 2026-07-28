@@ -41,7 +41,10 @@
         <a href="#release">版本</a>
         <a href="/changelog/">更新历史</a>
         <a href="https://github.com/jiangsir-tech/QuitHide">GitHub</a>
-        <a class="language-link" href="/en/" lang="en">English</a>
+        <span class="language-switcher" role="group" aria-label="选择语言">
+          <span class="language-option is-current" lang="zh-Hans" aria-current="page">中文</span>
+          <a class="language-option" href="/en/" lang="en" hreflang="en" aria-label="Switch to English">EN</a>
+        </span>
       </nav>
     </div>
   </header>
@@ -67,7 +70,12 @@
             累计下载 <strong data-download-count="{{DOWNLOAD_TOTAL_FALLBACK}}">{{DOWNLOAD_TOTAL_FALLBACK}}</strong> 次 <span aria-hidden="true">·</span> 每日更新
           </p>
         </div>
-        <div class="product-visual"><img src="/images/quithide-menu-zh-Hans.webp" width="820" height="1024" alt="QuitHide 中文主界面"></div>
+        <div class="product-visual">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/images/quithide-menu-zh-Hans-dark.webp">
+            <img src="/images/quithide-menu-zh-Hans-light.webp" width="820" height="1024" alt="QuitHide 中文主界面">
+          </picture>
+        </div>
       </div>
     </section>
 

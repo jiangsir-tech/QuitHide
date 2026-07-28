@@ -59,6 +59,13 @@ for (const [label, content] of [["Chinese page", chinese], ["English page", engl
   verifyHeroDownloadMetadataLayout(label, content);
 }
 
+for (const [label, content, imageStem] of [
+  ["Chinese page", chinese, "quithide-menu-zh-Hans"],
+  ["English page", english, "quithide-menu-en"],
+]) {
+  await verifyProductScreenshots(label, content, imageStem);
+}
+
 for (const [label, content, language] of [
   ["Chinese changelog", chineseChangelog, "zh-CN"],
   ["English changelog", englishChangelog, "en"],
@@ -91,6 +98,16 @@ if (!chinese.includes('href="/changelog/"')) {
 if (!english.includes('href="/en/changelog/"')) {
   throw new Error("English product page must link to the changelog");
 }
+verifyLanguageSwitcher("Chinese page", chinese, {
+  current: "中文",
+  alternate: "EN",
+  alternateHref: "/en/",
+});
+verifyLanguageSwitcher("English page", english, {
+  current: "EN",
+  alternate: "中文",
+  alternateHref: "/",
+});
 for (const route of ["/changelog/", "/en/changelog/"]) {
   if (!sitemap.includes(`<loc>http://localhost:4173${route}</loc>`)) {
     throw new Error(`Sitemap is missing ${route}`);
@@ -173,6 +190,8 @@ for (const [themeName, colors] of Object.entries(themes)) {
     ["check-text", "soft"],
     ["green", "badge-background"],
     ["on-accent", "blue"],
+    ["muted", "language-switch-background"],
+    ["text", "language-switch-active"],
   ]) {
     const ratio = contrastRatio(
       themeColor(colors, foreground, themeName),
@@ -245,6 +264,56 @@ function verifyThemeMetadata(label, content) {
     ));
     if (!match || !/^#[0-9a-f]{6}$/i.test(match.content ?? "")) {
       throw new Error(`${label} needs a hexadecimal ${scheme} theme-color with matching media`);
+    }
+  }
+}
+
+function verifyLanguageSwitcher(label, content, {
+  current,
+  alternate,
+  alternateHref,
+}) {
+  const start = content.indexOf('class="language-switcher"');
+  const end = content.indexOf("</nav>", start);
+  if (start === -1 || end === -1) {
+    throw new Error(`${label} is missing the language switcher`);
+  }
+
+  const markup = content.slice(start, end);
+  if (
+    !markup.includes('role="group"') ||
+    !markup.includes('aria-current="page"') ||
+    !markup.includes(`>${current}</span>`)
+  ) {
+    throw new Error(`${label} must mark ${current} as the current language`);
+  }
+  if (
+    !markup.includes(`href="${alternateHref}"`) ||
+    !markup.includes(`>${alternate}</a>`)
+  ) {
+    throw new Error(`${label} must link to the ${alternate} version`);
+  }
+}
+
+async function verifyProductScreenshots(label, content, imageStem) {
+  const lightAsset = `${imageStem}-light.webp`;
+  const darkAsset = `${imageStem}-dark.webp`;
+  if (
+    !content.includes(`src="/images/${lightAsset}"`) ||
+    !content.includes(
+      `media="(prefers-color-scheme: dark)" srcset="/images/${darkAsset}"`,
+    )
+  ) {
+    throw new Error(`${label} must provide matching light and dark screenshots`);
+  }
+
+  for (const asset of [lightAsset, darkAsset]) {
+    const data = await readFile(path.join(outputDirectory, "images", asset));
+    if (
+      data.subarray(0, 4).toString("ascii") !== "RIFF" ||
+      data.subarray(8, 12).toString("ascii") !== "WEBP"
+    ) {
+      throw new Error(`${label} screenshot is not a valid WebP asset: ${asset}`);
     }
   }
 }

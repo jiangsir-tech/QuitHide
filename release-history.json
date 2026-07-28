@@ -40,6 +40,16 @@
         "zh-CN": "恢复菜单窗口使用 macOS 系统默认背景透明效果，取消额外叠加的半透明背景。优化应用内更新说明：跨越多个版本升级时会累计显示当前版本之后的全部更新，并新增中英文完整更新历史页面；发布流程同时保留历史 appcast 项并校验更新记录连续性。",
         "en": "Restores the menu window's default macOS background translucency by removing the additional translucent overlay. Improves in-app release notes so upgrades spanning multiple versions show every change after the installed build, adds bilingual changelog pages, and strengthens appcast history retention and release continuity checks."
       }
+    },
+    {
+      "version": "0.6.2",
+      "build": 16,
+      "minimumSystemVersion": "13.0",
+      "publishedAt": "2026-07-28T04:39:35Z",
+      "releaseNotes": {
+        "zh-CN": "优化窗口保护在窗口快速变化或系统唤醒时的状态反馈：短暂读取失败会先等待窗口稳定，只有连续失败才提示保护不可用；保护中的 App 状态改为绿色，设置页新增随语言跳转的 QuitHide 官网入口。",
+        "en": "Improves window-protection feedback while windows are changing or the Mac is waking: transient read failures now wait for the window state to settle, and protection is reported unavailable only after consecutive failures. Protected app statuses are now shown in green, and Settings adds a language-aware link to the QuitHide website."
+      }
     }
   ]
 }

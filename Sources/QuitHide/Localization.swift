@@ -22,6 +22,14 @@ enum ResolvedAppLanguage: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var locale: Locale { Locale(identifier: rawValue) }
+    var productWebsiteURL: URL {
+        switch self {
+        case .zhHans:
+            return URL(string: "https://quithide.com/")!
+        case .en:
+            return URL(string: "https://quithide.com/en/")!
+        }
+    }
 
     fileprivate init?(localizationIdentifier: String) {
         let normalized = localizationIdentifier
@@ -136,6 +144,7 @@ enum L10n {
         case statusStageManagerGroupProtected = "status.stage_manager.group_protected"
         case statusStageManagerUnavailablePaused = "status.stage_manager.unavailable_paused"
         case statusScreenVisibilityProtected = "status.screen_visibility.protected"
+        case statusWindowProtectionWaitingForStability = "status.window_protection.waiting_for_stability"
         case statusWindowProtectionUnavailablePaused = "status.window_protection.unavailable_paused"
         case statusWaitingForBackground = "status.waiting_for_background"
         case statusActionAboutToRun = "status.action.about_to_run"
@@ -167,6 +176,7 @@ enum L10n {
         case settingsStageManagerProtectionEnabled = "settings.stage_manager_protection.enabled"
         case settingsStageManagerProtectionHelp = "settings.stage_manager_protection.help"
         case settingsStageManagerProtectionChecking = "settings.stage_manager_protection.checking"
+        case settingsStageManagerProtectionWaitingForStability = "settings.stage_manager_protection.waiting_for_stability"
         case settingsStageManagerProtectionDormant = "settings.stage_manager_protection.dormant"
         case settingsStageManagerProtectionActive = "settings.stage_manager_protection.active"
         case settingsStageManagerProtectionActiveCount = "settings.stage_manager_protection.active_count"
@@ -176,6 +186,7 @@ enum L10n {
         case settingsScreenVisibilityProtectionEnabled = "settings.screen_visibility_protection.enabled"
         case settingsScreenVisibilityProtectionHelp = "settings.screen_visibility_protection.help"
         case settingsScreenVisibilityProtectionChecking = "settings.screen_visibility_protection.checking"
+        case settingsScreenVisibilityProtectionWaitingForStability = "settings.screen_visibility_protection.waiting_for_stability"
         case settingsScreenVisibilityProtectionDormant = "settings.screen_visibility_protection.dormant"
         case settingsScreenVisibilityProtectionActive = "settings.screen_visibility_protection.active"
         case settingsScreenVisibilityProtectionActiveCount = "settings.screen_visibility_protection.active_count"
@@ -186,6 +197,7 @@ enum L10n {
         case settingsAboutVersion = "settings.about.version"
         case settingsAboutNotarized = "settings.about.notarized"
         case settingsUpdateAutomatic = "settings.update.automatic"
+        case settingsWebsite = "settings.website"
         case settingsGitHubProject = "settings.github_project"
 
         case updateActionDownload = "update.action.download"
