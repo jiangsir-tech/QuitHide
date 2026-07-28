@@ -5,6 +5,7 @@ PROJECT_DIR="${0:A:h:h}"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 DIST_DIR="$PROJECT_DIR/dist"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
 DMG_PATH="$DIST_DIR/QuitHide-v${VERSION}-universal.dmg"
 CHECKSUM_PATH="$DMG_PATH.sha256"
 APPCAST_PATH="$DIST_DIR/QuitHide-v${VERSION}-appcast.xml"
@@ -77,6 +78,7 @@ if [[ -e "$DMG_PATH" || -e "$CHECKSUM_PATH" || -e "$APPCAST_PATH" ]]; then
         --context context:primary-signature \
         --verbose=4 \
         "$DMG_PATH"
+    "$PROJECT_DIR/scripts/verify-dmg-image.sh" "$DMG_PATH" "$VERSION" "$BUILD"
     (
         cd "$DIST_DIR"
         /usr/bin/shasum -a 256 -c "${CHECKSUM_PATH:t}"
@@ -121,6 +123,7 @@ QUITHIDE_SIGNING_IDENTITY="$SIGNING_IDENTITY" "$PROJECT_DIR/scripts/build-dmg.sh
     --context context:primary-signature \
     --verbose=4 \
     "$DMG_PATH"
+"$PROJECT_DIR/scripts/verify-dmg-image.sh" "$DMG_PATH" "$VERSION" "$BUILD"
 
 cd "$DIST_DIR"
 /usr/bin/shasum -a 256 "${DMG_PATH:t}" > "${CHECKSUM_PATH:t}"

@@ -5,8 +5,11 @@ PROJECT_DIR="${0:A:h:h}"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 DMG_BACKGROUND_SOURCE="$PROJECT_DIR/Resources/DMGBackground.svg"
 DMG_LAYOUT_SCRIPT="$PROJECT_DIR/scripts/configure-dmg-layout.applescript"
+DMG_LAYOUT_VERIFIER="$PROJECT_DIR/scripts/verify-dmg-layout.sh"
+DMG_IMAGE_VERIFIER="$PROJECT_DIR/scripts/verify-dmg-image.sh"
 DIST_DIR="$PROJECT_DIR/dist"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
 SIGNING_IDENTITY="${QUITHIDE_SIGNING_IDENTITY:-}"
 if [[ -n "$SIGNING_IDENTITY" ]]; then
     DMG_NAME="QuitHide-v${VERSION}-universal.dmg"
@@ -16,6 +19,7 @@ fi
 DMG_PATH="$DIST_DIR/$DMG_NAME"
 CHECKSUM_PATH="$DMG_PATH.sha256"
 STAGING_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/QuitHide-release.XXXXXX")"
+STAGING_DIR="${STAGING_DIR:A}"
 SAFE_BUILD_DIR="$STAGING_DIR/build"
 SOURCE_APP="$SAFE_BUILD_DIR/QuitHide.app"
 DMG_CONTENTS_DIR="$STAGING_DIR/dmg"
@@ -32,6 +36,46 @@ cleanup() {
     /bin/rm -rf "$STAGING_DIR"
 }
 trap cleanup EXIT
+
+if ! MOUNTED_IMAGE_PATHS="$(
+    /usr/bin/hdiutil info -plist |
+        /usr/bin/python3 -c '
+import plistlib
+import sys
+
+payload = plistlib.loads(sys.stdin.buffer.read())
+for image in payload.get("images", []):
+    for entity in image.get("system-entities", []):
+        mount_point = entity.get("mount-point")
+        if mount_point:
+            print(mount_point)
+'
+)"; then
+    /usr/bin/printf 'Could not inspect mounted disk images before building the DMG.\n' >&2
+    exit 1
+fi
+
+CONFLICTING_MOUNTS=()
+while IFS= read -r existing_mount; do
+    [[ -n "$existing_mount" ]] || continue
+    existing_volume_name="$(
+        /usr/sbin/diskutil info -plist "$existing_mount" 2>/dev/null |
+            /usr/bin/plutil -extract VolumeName raw -o - - 2>/dev/null || true
+    )"
+    if [[ "$existing_volume_name" == "QuitHide" ]]; then
+        CONFLICTING_MOUNTS+=("$existing_mount")
+    fi
+done <<< "$MOUNTED_IMAGE_PATHS"
+if (( ${#CONFLICTING_MOUNTS[@]} > 0 )); then
+    /usr/bin/printf \
+        'Cannot build the QuitHide DMG while another QuitHide disk image is mounted:\n' >&2
+    for existing_mount in "${CONFLICTING_MOUNTS[@]}"; do
+        /usr/bin/printf '  %s\n' "$existing_mount" >&2
+    done
+    /usr/bin/printf \
+        'Eject the listed disk images and retry so Finder cannot write layout metadata to the wrong volume.\n' >&2
+    exit 1
+fi
 
 QUITHIDE_OUTPUT_DIR="$SAFE_BUILD_DIR" "$PROJECT_DIR/scripts/build-app.sh"
 
@@ -85,7 +129,29 @@ fi
 DMG_IS_MOUNTED=1
 
 /usr/bin/osascript "$DMG_LAYOUT_SCRIPT" "$MOUNT_DIR"
-/bin/sync
+
+LAYOUT_STABLE_PASSES=0
+LAYOUT_IS_STABLE=0
+for attempt in {1..20}; do
+    /bin/sync
+    if "$DMG_LAYOUT_VERIFIER" "$MOUNT_DIR" "$VERSION" "$BUILD" >/dev/null 2>&1; then
+        (( LAYOUT_STABLE_PASSES += 1 ))
+    else
+        LAYOUT_STABLE_PASSES=0
+    fi
+    if (( LAYOUT_STABLE_PASSES >= 2 )); then
+        LAYOUT_IS_STABLE=1
+        break
+    fi
+    /bin/sleep 0.5
+done
+if [[ "$LAYOUT_IS_STABLE" != "1" ]]; then
+    "$DMG_LAYOUT_VERIFIER" "$MOUNT_DIR" "$VERSION" "$BUILD" || true
+    /usr/bin/printf \
+        'Finder DMG layout metadata did not become complete and stable before timeout.\n' >&2
+    exit 1
+fi
+
 /usr/bin/hdiutil detach "$MOUNT_DIR" >/dev/null
 DMG_IS_MOUNTED=0
 
@@ -104,6 +170,8 @@ if [[ -n "$SIGNING_IDENTITY" ]]; then
         "$DMG_PATH"
     /usr/bin/codesign --verify --strict "$DMG_PATH"
 fi
+
+"$DMG_IMAGE_VERIFIER" "$DMG_PATH" "$VERSION" "$BUILD"
 
 cd "$DIST_DIR"
 /usr/bin/shasum -a 256 "$DMG_NAME" > "$DMG_NAME.sha256"

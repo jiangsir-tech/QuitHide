@@ -15,6 +15,9 @@ cd "$PROJECT_DIR"
 /usr/bin/printf 'Running release metadata script checks.\n'
 "$PROJECT_DIR/Tests/ScriptChecks/release-metadata-tests.sh"
 
+/usr/bin/printf 'Running DMG layout script checks.\n'
+"$PROJECT_DIR/Tests/ScriptChecks/dmg-layout-tests.sh"
+
 /usr/bin/printf 'Running product website checks.\n'
 /usr/bin/env npm --prefix "$PROJECT_DIR/website" test
 

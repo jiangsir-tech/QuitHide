@@ -5,16 +5,24 @@ PROJECT_DIR="${0:A:h:h}"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 MANIFEST_PATH="$PROJECT_DIR/update.json"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")"
+BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST")"
 TAG_NAME="v${VERSION}"
 DIST_DIR="$PROJECT_DIR/dist"
 DMG_PATH="$DIST_DIR/QuitHide-v${VERSION}-universal.dmg"
 CHECKSUM_PATH="$DMG_PATH.sha256"
 APPCAST_PATH="$DIST_DIR/QuitHide-v${VERSION}-appcast.xml"
+DMG_NAME="${DMG_PATH:t}"
+CHECKSUM_NAME="${CHECKSUM_PATH:t}"
+APPCAST_NAME="${APPCAST_PATH:t}"
 RELEASE_NOTES_PATH="$(/usr/bin/mktemp "${TMPDIR:-/tmp}/QuitHide-release-notes.XXXXXX")"
+RESUME_DIR=""
 RESUME_MODE="${QUITHIDE_RESUME:-0}"
 
 cleanup() {
     /bin/rm -f "$RELEASE_NOTES_PATH"
+    if [[ -n "$RESUME_DIR" ]]; then
+        /bin/rm -rf "$RESUME_DIR"
+    fi
 }
 trap cleanup EXIT
 
@@ -41,6 +49,50 @@ release_by_tag() {
 RELEASE_COMMIT="$(/usr/bin/git -C "$PROJECT_DIR" rev-parse HEAD)"
 if [[ "$RESUME_MODE" == "1" ]]; then
     RELEASE_JSON="$(release_by_tag)"
+    if [[ "$(jq -r '.draft' <<<"$RELEASE_JSON")" != "true" ]]; then
+        /usr/bin/printf 'Resume mode requires an unpublished draft release.\n' >&2
+        exit 1
+    fi
+    if [[ "$(jq '.assets | length' <<<"$RELEASE_JSON")" -ne 3 ]]; then
+        /usr/bin/printf 'Resume mode requires exactly three draft assets.\n' >&2
+        exit 1
+    fi
+
+    RESUME_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/QuitHide-release-resume.XXXXXX")"
+    for asset_name in "$DMG_NAME" "$CHECKSUM_NAME" "$APPCAST_NAME"; do
+        asset_id="$(
+            jq -r --arg name "$asset_name" \
+                '[.assets[] | select(.name == $name)] | if length == 1 then .[0].id else empty end' \
+                <<<"$RELEASE_JSON"
+        )"
+        if [[ -z "$asset_id" ]]; then
+            /usr/bin/printf 'Missing or duplicate draft asset during resume: %s\n' "$asset_name" >&2
+            exit 1
+        fi
+        gh api \
+            --header 'Accept: application/octet-stream' \
+            "repos/jiangsir-tech/QuitHide/releases/assets/$asset_id" \
+            > "$RESUME_DIR/$asset_name"
+    done
+
+    "$PROJECT_DIR/scripts/verify-dmg-image.sh" \
+        "$RESUME_DIR/$DMG_NAME" \
+        "$VERSION" \
+        "$BUILD"
+    (
+        cd "$RESUME_DIR"
+        /usr/bin/shasum -a 256 -c "$CHECKSUM_NAME"
+    )
+    PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$INFO_PLIST")"
+    /usr/bin/env node "$PROJECT_DIR/website/scripts/verify-sparkle-release.mjs" \
+        --manifest "$MANIFEST_PATH" \
+        --release-history "$PROJECT_DIR/release-history.json" \
+        --dmg "$RESUME_DIR/$DMG_NAME" \
+        --checksum "$RESUME_DIR/$CHECKSUM_NAME" \
+        --appcast "$RESUME_DIR/$APPCAST_NAME" \
+        --download-base-url "${QUITHIDE_DOWNLOAD_BASE_URL:-https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com}" \
+        --public-key "$PUBLIC_KEY" >/dev/null
+
     /usr/bin/printf 'Resuming existing GitHub release workflow for %s.\n' "$TAG_NAME"
 else
     "$PROJECT_DIR/scripts/release-notarized.sh"

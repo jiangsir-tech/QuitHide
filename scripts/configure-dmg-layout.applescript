@@ -2,7 +2,13 @@ on run arguments
     if (count of arguments) is not 1 then error "Expected the mounted DMG path."
 
     set mountPath to item 1 of arguments
+    set expectedMountPath to mountPath
+    if expectedMountPath does not end with "/" then set expectedMountPath to expectedMountPath & "/"
     set mountedFolder to POSIX file mountPath as alias
+    set resolvedMountPath to POSIX path of mountedFolder
+    if resolvedMountPath is not expectedMountPath then
+        error "Finder resolved the writable DMG to a different mounted volume: " & resolvedMountPath
+    end if
     set backgroundImage to POSIX file (mountPath & "/.background/DMGBackground.png") as alias
 
     tell application "Finder"
@@ -30,5 +36,6 @@ on run arguments
         update mountedDisk without registering applications
         delay 2
         close dmgWindow
+        delay 1
     end tell
 end run

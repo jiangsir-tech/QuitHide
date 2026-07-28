@@ -50,6 +50,16 @@
         "zh-CN": "优化窗口保护在窗口快速变化或系统唤醒时的状态反馈：短暂读取失败会先等待窗口稳定，只有连续失败才提示保护不可用；保护中的 App 状态改为绿色，设置页新增随语言跳转的 QuitHide 官网入口。",
         "en": "Improves window-protection feedback while windows are changing or the Mac is waking: transient read failures now wait for the window state to settle, and protection is reported unavailable only after consecutive failures. Protected app statuses are now shown in green, and Settings adds a language-aware link to the QuitHide website."
       }
+    },
+    {
+      "version": "0.6.3",
+      "build": 17,
+      "minimumSystemVersion": "13.0",
+      "publishedAt": "2026-07-28T05:35:50Z",
+      "releaseNotes": {
+        "zh-CN": "修复 v0.6.2 安装盘在已有同名 QuitHide 磁盘映像挂载时可能丢失拖拽安装提示的问题。发布构建现在会阻止同名卷冲突，并在打包和公证后验证 Finder 布局、背景图与 Applications 链接，避免不完整安装盘再次发布。App 功能未发生变化。",
+        "en": "Fixes an issue where the v0.6.2 disk image could lose its drag-to-Applications guidance when another QuitHide disk image with the same volume name was already mounted. Release builds now block same-name volume conflicts and verify the Finder layout, background, and Applications link after packaging and notarization. App functionality is unchanged."
+      }
     }
   ]
 }
