@@ -44,6 +44,89 @@ enum ApplicationUnhidePolicy {
     }
 }
 
+enum HideActionPresentation: Equatable {
+    case none
+    case inProgress
+    case completed
+}
+
+enum HideActionPresentationPolicy {
+    static func presentation(
+        isHidden: Bool,
+        hasConfirmedCompletion: Bool,
+        hasOperationInFlight: Bool
+    ) -> HideActionPresentation {
+        if isHidden || hasConfirmedCompletion {
+            return .completed
+        }
+        if hasOperationInFlight {
+            return .inProgress
+        }
+        return .none
+    }
+}
+
+enum HideCompletionLifecyclePolicy {
+    static func shouldPreserveOnDeactivate(
+        hasOperationToken: Bool,
+        hasRowHideOwnership: Bool,
+        hasConfirmedCompletion: Bool,
+        isAlreadyHandled: Bool
+    ) -> Bool {
+        hasOperationToken ||
+            hasRowHideOwnership ||
+            (hasConfirmedCompletion && isAlreadyHandled)
+    }
+}
+
+enum AutomaticHideAttemptPolicy {
+    static func shouldAttempt(
+        hasConfirmedCompletion: Bool,
+        isAlreadyHandled: Bool,
+        canRetry: Bool,
+        elapsed: TimeInterval,
+        actionDelay: TimeInterval
+    ) -> Bool {
+        !hasConfirmedCompletion &&
+            !isAlreadyHandled &&
+            canRetry &&
+            elapsed >= max(actionDelay, 0)
+    }
+}
+
+enum HideCompletionReconciliation: Equatable {
+    case retainCompletion
+    case clearAsUnhidden
+}
+
+struct HideCompletionRuntimeState: Equatable {
+    private(set) var firstObservedNotHiddenAt: TimeInterval?
+
+    mutating func observe(
+        isHidden: Bool,
+        hasVisibleTransitionEvidence: Bool,
+        at instant: TimeInterval,
+        confirmationDelay: TimeInterval
+    ) -> HideCompletionReconciliation {
+        if isHidden || !hasVisibleTransitionEvidence {
+            firstObservedNotHiddenAt = nil
+            return .retainCompletion
+        }
+
+        let clampedDelay = max(confirmationDelay, 0)
+        guard let firstObservedNotHiddenAt else {
+            self.firstObservedNotHiddenAt = instant
+            return clampedDelay == 0
+                ? .clearAsUnhidden
+                : .retainCompletion
+        }
+
+        return max(instant - firstObservedNotHiddenAt, 0) >= clampedDelay
+            ? .clearAsUnhidden
+            : .retainCompletion
+    }
+}
+
 enum PreQuitHideStage: Equatable {
     case pending
     case inFlight

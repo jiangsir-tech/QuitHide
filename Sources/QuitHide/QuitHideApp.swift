@@ -195,6 +195,7 @@ final class AppModel: ObservableObject {
     )
     private static let retryDelay: TimeInterval = 30
     private static let forceQuitVerificationDelay: TimeInterval = 5
+    private static let hideStateDriftConfirmationDelay: TimeInterval = 5
     @Published var apps: [RunningAppItem] = []
     @Published private(set) var catalogApps: [CatalogAppItem] = []
     @Published var searchText = ""
@@ -267,6 +268,8 @@ final class AppModel: ObservableObject {
     private var retryStates: [String: ActionRetryState] = [:]
     private var oneShotActionStates: [String: OneShotActionState] = [:]
     private var actionOperationTokens: [String: UUID] = [:]
+    private var hideCompletionStates:
+        [String: HideCompletionRuntimeState] = [:]
     private var quitRequestStates: [String: QuitRequestRuntimeState] = [:]
     private var forceQuitOperationTokens: [String: UUID] = [:]
     private var forceQuitFailures: Set<String> = []
@@ -693,6 +696,13 @@ final class AppModel: ObservableObject {
     func automationStatus(for item: RunningAppItem) -> AppAutomationStatus? {
         let bundleID = item.bundleIdentifier
         let runtimeID = item.id
+        let hidePresentation = HideActionPresentationPolicy.presentation(
+            isHidden: item.isHidden,
+            hasConfirmedCompletion:
+                hideCompletionStates[runtimeID] != nil,
+            hasOperationInFlight:
+                actionOperationTokens[runtimeID] != nil
+        )
 
         if forceQuitOperationTokens[runtimeID] != nil {
             return AppAutomationStatus(text: localized(.statusForceQuitInProgress))
@@ -726,10 +736,18 @@ final class AppModel: ObservableObject {
         if let oneShotAction = oneShotActionStates[runtimeID]?.action {
             switch oneShotAction {
             case .hide:
-                return AppAutomationStatus(
-                    text: localized(item.isHidden ? .statusHideHidden : .statusHideInProgress),
-                    isError: false
-                )
+                if hidePresentation == .completed {
+                    return AppAutomationStatus(
+                        text: localized(.statusHideHidden),
+                        isError: false
+                    )
+                }
+                if hidePresentation == .inProgress {
+                    return AppAutomationStatus(
+                        text: localized(.statusHideInProgress),
+                        isError: false
+                    )
+                }
             case .quit:
                 return AppAutomationStatus(
                     text: localized(.statusQuitRequestedWaiting),
@@ -754,14 +772,25 @@ final class AppModel: ObservableObject {
                 isError: true
             )
         }
-        if action == .hide, item.isHidden {
-            return AppAutomationStatus(text: localized(.statusHideHidden), isError: false)
+        if action == .hide {
+            if hidePresentation == .completed {
+                return AppAutomationStatus(
+                    text: localized(.statusHideHidden),
+                    isError: false
+                )
+            }
+            if hidePresentation == .inProgress {
+                return AppAutomationStatus(
+                    text: localized(.statusHideInProgress),
+                    isError: false
+                )
+            }
         }
-        if alreadyHandled.contains(runtimeID) {
-            let text = action == .quit
-                ? localized(.statusQuitRequestedWaiting)
-                : localized(.statusHideInProgress)
-            return AppAutomationStatus(text: text, isError: false)
+        if action == .quit, alreadyHandled.contains(runtimeID) {
+            return AppAutomationStatus(
+                text: localized(.statusQuitRequestedWaiting),
+                isError: false
+            )
         }
         if automaticallyProtectedBundleIdentifiers.contains(bundleID) {
             let statusKey: L10n.Key = activeAutomaticWindowProtectionMode ==
@@ -1029,6 +1058,7 @@ final class AppModel: ObservableObject {
             preQuitHideStates.removeValue(forKey: target.id)
             quitRequestStates.removeValue(forKey: target.id)
             actionOperationTokens.removeValue(forKey: target.id)
+            hideCompletionStates.removeValue(forKey: target.id)
             forceQuitFailures.remove(target.id)
             forceQuitOperationTokens[target.id] = token
             alreadyHandled.insert(target.id)
@@ -1115,12 +1145,89 @@ final class AppModel: ObservableObject {
             }
 
         let runningRuntimeIDs = Set(running.map(\.id))
+        let observationInstant = automationClock.now
         for item in running {
             let action = effectivePolicy(for: item.bundleIdentifier)
-            if action == .hide, item.isHidden {
-                alreadyHandled.insert(item.id)
-                actionFailures.removeValue(forKey: item.id)
-                retryStates.removeValue(forKey: item.id)
+            let oneShotHideIsActive =
+                oneShotActionStates[item.id]?.action == .hide
+            let hasConflictingOperation =
+                actionOperationTokens[item.id] != nil ||
+                quitRequestStates[item.id] != nil ||
+                forceQuitOperationTokens[item.id] != nil
+            let tracksHideCompletion =
+                action == .hide || oneShotHideIsActive
+
+            if tracksHideCompletion, item.isHidden {
+                if action == .hide {
+                    alreadyHandled.insert(item.id)
+                    actionFailures.removeValue(forKey: item.id)
+                    retryStates.removeValue(forKey: item.id)
+                }
+                var completion =
+                    hideCompletionStates[item.id] ??
+                    HideCompletionRuntimeState()
+                _ = completion.observe(
+                    isHidden: true,
+                    hasVisibleTransitionEvidence: false,
+                    at: observationInstant,
+                    confirmationDelay:
+                        Self.hideStateDriftConfirmationDelay
+                )
+                hideCompletionStates[item.id] = completion
+            } else if tracksHideCompletion,
+                      !hasConflictingOperation,
+                      var completion = hideCompletionStates[item.id] {
+                let hasVisibleTransitionEvidence =
+                    item.isActive ||
+                    automaticallyProtectedBundleIdentifiers.contains(
+                        item.bundleIdentifier
+                    )
+                switch completion.observe(
+                    isHidden: false,
+                    hasVisibleTransitionEvidence:
+                        hasVisibleTransitionEvidence,
+                    at: observationInstant,
+                    confirmationDelay:
+                        Self.hideStateDriftConfirmationDelay
+                ) {
+                case .retainCompletion:
+                    hideCompletionStates[item.id] = completion
+                    if action == .hide {
+                        alreadyHandled.insert(item.id)
+                    }
+                case .clearAsUnhidden:
+                    clearCompletedHideStateAfterObservedUnhide(
+                        for: item,
+                        at: observationInstant
+                    )
+                }
+            } else if tracksHideCompletion,
+                      !hasConflictingOperation,
+                      hideCompletionStates[item.id] == nil,
+                      oneShotHideIsActive ||
+                        (
+                            action == .hide &&
+                            alreadyHandled.contains(item.id) &&
+                            actionFailures[item.id] == nil
+                        ) {
+                let hasVisibleTransitionEvidence =
+                    item.isActive ||
+                    automaticallyProtectedBundleIdentifiers.contains(
+                        item.bundleIdentifier
+                    )
+                if hasVisibleTransitionEvidence {
+                    clearCompletedHideStateAfterObservedUnhide(
+                        for: item,
+                        at: observationInstant
+                    )
+                } else {
+                    // A deduplication marker is not an in-flight operation.
+                    // Without positive visibility evidence, recover it as a
+                    // completed hide rather than trusting a drifting flag or
+                    // repeatedly hiding an already invisible application.
+                    hideCompletionStates[item.id] =
+                        HideCompletionRuntimeState()
+                }
             }
 
             let timerDirective = ApplicationIdleTimerPolicy.directive(
@@ -1145,6 +1252,9 @@ final class AppModel: ObservableObject {
         actionFailures = actionFailures.filter { runningRuntimeIDs.contains($0.key) }
         retryStates = retryStates.filter { runningRuntimeIDs.contains($0.key) }
         oneShotActionStates = oneShotActionStates.filter { runningRuntimeIDs.contains($0.key) }
+        hideCompletionStates = hideCompletionStates.filter {
+            runningRuntimeIDs.contains($0.key)
+        }
         quitRequestStates = quitRequestStates.filter { runningRuntimeIDs.contains($0.key) }
         forceQuitFailures.formIntersection(runningRuntimeIDs)
         quitDeadlineAttempted.formIntersection(runningRuntimeIDs)
@@ -1156,6 +1266,35 @@ final class AppModel: ObservableObject {
         }
         apps = running
         rebuildCatalog()
+    }
+
+    private func clearCompletedHideStateAfterObservedUnhide(
+        for item: RunningAppItem,
+        at eventInstant: TimeInterval
+    ) {
+        hideCompletionStates.removeValue(forKey: item.id)
+        alreadyHandled.remove(item.id)
+        actionFailures.removeValue(forKey: item.id)
+        retryStates.removeValue(forKey: item.id)
+        if oneShotActionStates[item.id]?.action == .hide {
+            oneShotActionStates.removeValue(forKey: item.id)
+        }
+
+        let shouldRestartTimer = ApplicationUnhidePolicy.shouldRestartTimer(
+            actionIsAutomated:
+                effectivePolicy(for: item.bundleIdentifier).isAutomated,
+            applicationIsActive: item.isActive,
+            applicationIsHeld:
+                automaticallyProtectedBundleIdentifiers.contains(
+                    item.bundleIdentifier
+                )
+        )
+        if shouldRestartTimer {
+            inactiveSince[item.id] =
+                timingSuspension.effectiveNow(at: eventInstant)
+        } else {
+            inactiveSince.removeValue(forKey: item.id)
+        }
     }
 
     private func rebuildCatalog() {
@@ -1531,6 +1670,7 @@ final class AppModel: ObservableObject {
                 self.retryStates.removeValue(forKey: runtimeID)
                 self.oneShotActionStates.removeValue(forKey: runtimeID)
                 self.actionOperationTokens.removeValue(forKey: runtimeID)
+                self.hideCompletionStates.removeValue(forKey: runtimeID)
                 self.quitDeadlineAttempted.remove(runtimeID)
                 self.preQuitHideStates.removeValue(forKey: runtimeID)
                 self.refreshApps()
@@ -1553,10 +1693,42 @@ final class AppModel: ObservableObject {
                 ) {
                     self.inactiveSince[runtimeID] = self.effectiveNow
                 }
-                self.alreadyHandled.remove(runtimeID)
-                self.actionFailures.removeValue(forKey: runtimeID)
-                self.retryStates.removeValue(forKey: runtimeID)
+                let preserveHideCompletion =
+                    HideCompletionLifecyclePolicy
+                    .shouldPreserveOnDeactivate(
+                        hasOperationToken:
+                            self.actionOperationTokens[runtimeID] != nil,
+                        hasRowHideOwnership:
+                            self.oneShotActionStates[runtimeID]?.action ==
+                                .hide,
+                        hasConfirmedCompletion:
+                            self.hideCompletionStates[runtimeID] != nil,
+                        isAlreadyHandled:
+                            self.alreadyHandled.contains(runtimeID)
+                    )
+                if preserveHideCompletion {
+                    if self.effectivePolicy(for: bundleID) == .hide {
+                        self.alreadyHandled.insert(runtimeID)
+                    }
+                } else {
+                    self.alreadyHandled.remove(runtimeID)
+                    self.actionFailures.removeValue(forKey: runtimeID)
+                    self.retryStates.removeValue(forKey: runtimeID)
+                    self.hideCompletionStates.removeValue(
+                        forKey: runtimeID
+                    )
+                }
                 self.refreshApps()
+            }
+        })
+
+        observers.append(center.addObserver(
+            forName: NSWorkspace.didHideApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.refreshApps()
             }
         })
 
@@ -1681,6 +1853,7 @@ final class AppModel: ObservableObject {
             let runtimeID = item.id
             let action = effectivePolicy(for: bundleID)
             guard action.isAutomated,
+                  actionOperationTokens[runtimeID] == nil,
                   oneShotActionStates[runtimeID] == nil,
                   quitRequestStates[runtimeID] == nil,
                   forceQuitOperationTokens[runtimeID] == nil,
@@ -1744,9 +1917,16 @@ final class AppModel: ObservableObject {
                     quitDeadlineAttempted.insert(runtimeID)
                 }
             } else {
-                guard !alreadyHandled.contains(runtimeID),
-                      retryStates[runtimeID]?.canAttempt(at: now) != false,
-                      elapsed >= actionDelay else { continue }
+                guard AutomaticHideAttemptPolicy.shouldAttempt(
+                    hasConfirmedCompletion:
+                        hideCompletionStates[runtimeID] != nil,
+                    isAlreadyHandled:
+                        alreadyHandled.contains(runtimeID),
+                    canRetry:
+                        retryStates[runtimeID]?.canAttempt(at: now) != false,
+                    elapsed: elapsed,
+                    actionDelay: actionDelay
+                ) else { continue }
             }
 
             guard await validateAcceptedScreenVisibilityFingerprint() else {
@@ -1916,6 +2096,7 @@ final class AppModel: ObservableObject {
         quitRequestStates.removeValue(forKey: runtimeIdentifier)
         forceQuitOperationTokens.removeValue(forKey: runtimeIdentifier)
         forceQuitFailures.remove(runtimeIdentifier)
+        hideCompletionStates.removeValue(forKey: runtimeIdentifier)
         let operationToken = UUID()
         actionOperationTokens[runtimeIdentifier] = operationToken
         if source.isRowOverride {
@@ -2060,11 +2241,18 @@ final class AppModel: ObservableObject {
             }
             actionOperationTokens.removeValue(forKey: runtimeIdentifier)
             if succeeded {
+                if action == .hide {
+                    hideCompletionStates[runtimeIdentifier] =
+                        HideCompletionRuntimeState()
+                }
                 statusMessage = action == .quit
                     ? "已请求退出：\(name)"
                     : "已\(action.title)：\(name)"
                 Self.logger.notice("Row action succeeded: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public)")
             } else {
+                hideCompletionStates.removeValue(
+                    forKey: runtimeIdentifier
+                )
                 oneShotActionStates.removeValue(forKey: runtimeIdentifier)
                 statusMessage = "无法\(action.title)：\(name)"
                 Self.logger.error("Row action failed: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public)")
@@ -2077,6 +2265,11 @@ final class AppModel: ObservableObject {
         actionOperationTokens.removeValue(forKey: runtimeIdentifier)
         let automatic = source.isAutomatic
         if succeeded {
+            if action == .hide {
+                hideCompletionStates[runtimeIdentifier] =
+                    HideCompletionRuntimeState()
+                alreadyHandled.insert(runtimeIdentifier)
+            }
             actionFailures.removeValue(forKey: runtimeIdentifier)
             retryStates.removeValue(forKey: runtimeIdentifier)
             statusMessage = action == .quit
@@ -2084,6 +2277,7 @@ final class AppModel: ObservableObject {
                 : "\(automatic ? "自动" : "已")\(action.title)：\(name)"
             Self.logger.notice("Action succeeded: \(action.rawValue, privacy: .public) \(bundleIdentifier, privacy: .public) automatic=\(automatic, privacy: .public)")
         } else {
+            hideCompletionStates.removeValue(forKey: runtimeIdentifier)
             actionFailures[runtimeIdentifier] = action
             var retryState = retryStates[runtimeIdentifier] ?? ActionRetryState()
             retryState.recordFailure(at: effectiveNow, delay: Self.retryDelay)
@@ -2703,6 +2897,7 @@ final class AppModel: ObservableObject {
                 alreadyHandled.remove(item.id)
                 actionFailures.removeValue(forKey: item.id)
                 retryStates.removeValue(forKey: item.id)
+                hideCompletionStates.removeValue(forKey: item.id)
             }
 
             if restartTimer,
@@ -2760,6 +2955,7 @@ final class AppModel: ObservableObject {
         retryStates.removeValue(forKey: runtimeIdentifier)
         oneShotActionStates.removeValue(forKey: runtimeIdentifier)
         actionOperationTokens.removeValue(forKey: runtimeIdentifier)
+        hideCompletionStates.removeValue(forKey: runtimeIdentifier)
         quitRequestStates.removeValue(forKey: runtimeIdentifier)
         forceQuitFailures.remove(runtimeIdentifier)
         quitDeadlineAttempted.remove(runtimeIdentifier)
@@ -2786,6 +2982,7 @@ final class AppModel: ObservableObject {
             retryStates.removeValue(forKey: item.id)
             oneShotActionStates.removeValue(forKey: item.id)
             actionOperationTokens.removeValue(forKey: item.id)
+            hideCompletionStates.removeValue(forKey: item.id)
             quitRequestStates.removeValue(forKey: item.id)
             forceQuitOperationTokens.removeValue(forKey: item.id)
             forceQuitFailures.remove(item.id)
@@ -2810,6 +3007,7 @@ final class AppModel: ObservableObject {
             retryStates.removeValue(forKey: item.id)
             oneShotActionStates.removeValue(forKey: item.id)
             actionOperationTokens.removeValue(forKey: item.id)
+            hideCompletionStates.removeValue(forKey: item.id)
             quitRequestStates.removeValue(forKey: item.id)
             forceQuitOperationTokens.removeValue(forKey: item.id)
             forceQuitFailures.remove(item.id)
@@ -2825,6 +3023,7 @@ final class AppModel: ObservableObject {
             retryStates.removeValue(forKey: item.id)
             oneShotActionStates.removeValue(forKey: item.id)
             actionOperationTokens.removeValue(forKey: item.id)
+            hideCompletionStates.removeValue(forKey: item.id)
             quitRequestStates.removeValue(forKey: item.id)
             forceQuitOperationTokens.removeValue(forKey: item.id)
             forceQuitFailures.remove(item.id)
@@ -3606,7 +3805,7 @@ struct SettingsSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 410)
+        .frame(width: 440)
         .environment(\.locale, model.effectiveLocale)
         .background {
             SettingsWindowConfigurator(title: model.localized(.settingsTitle))

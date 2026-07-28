@@ -135,6 +135,179 @@ struct ApplicationUnhidePolicyTests {
     }
 }
 
+@Suite("Hide action runtime state")
+struct HideActionRuntimeStateTests {
+    @Test("Only a real operation is presented as in progress")
+    func inProgressRequiresOperation() {
+        #expect(HideActionPresentationPolicy.presentation(
+            isHidden: false,
+            hasConfirmedCompletion: false,
+            hasOperationInFlight: true
+        ) == .inProgress)
+        #expect(HideActionPresentationPolicy.presentation(
+            isHidden: false,
+            hasConfirmedCompletion: false,
+            hasOperationInFlight: false
+        ) == .none)
+    }
+
+    @Test("A confirmed completion remains completed during a transient flag drift")
+    func completionSurvivesTransientDrift() {
+        #expect(HideActionPresentationPolicy.presentation(
+            isHidden: false,
+            hasConfirmedCompletion: true,
+            hasOperationInFlight: false
+        ) == .completed)
+    }
+
+    @Test("An observed hidden state takes priority over an unfinished callback")
+    func observedHiddenStateWins() {
+        #expect(HideActionPresentationPolicy.presentation(
+            isHidden: true,
+            hasConfirmedCompletion: false,
+            hasOperationInFlight: true
+        ) == .completed)
+    }
+
+    @Test("Hide-driven deactivation preserves only an owned hide lifecycle")
+    func deactivationPreservesOwnedHideLifecycle() {
+        #expect(HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: true,
+            hasRowHideOwnership: false,
+            hasConfirmedCompletion: false,
+            isAlreadyHandled: false
+        ))
+        #expect(HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: false,
+            hasRowHideOwnership: true,
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: false
+        ))
+        #expect(HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: false,
+            hasRowHideOwnership: false,
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: true
+        ))
+        #expect(!HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: false,
+            hasRowHideOwnership: false,
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: false
+        ))
+    }
+
+    @Test("A confirmed completion blocks a repeated automatic hide")
+    func completionBlocksRepeatedAutomaticHide() {
+        #expect(!AutomaticHideAttemptPolicy.shouldAttempt(
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: false,
+            canRetry: true,
+            elapsed: 600,
+            actionDelay: 300
+        ))
+        #expect(AutomaticHideAttemptPolicy.shouldAttempt(
+            hasConfirmedCompletion: false,
+            isAlreadyHandled: false,
+            canRetry: true,
+            elapsed: 300,
+            actionDelay: 300
+        ))
+    }
+
+    @Test("A continuously non-hidden state clears completion at the grace boundary")
+    func sustainedDriftClearsCompletion() {
+        var state = HideCompletionRuntimeState()
+
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 100,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 104.999,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 105,
+            confirmationDelay: 5
+        ) == .clearAsUnhidden)
+    }
+
+    @Test("A hidden observation resets the non-hidden confirmation window")
+    func hiddenObservationResetsDrift() {
+        var state = HideCompletionRuntimeState()
+
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 100,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.observe(
+            isHidden: true,
+            hasVisibleTransitionEvidence: false,
+            at: 104,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.firstObservedNotHiddenAt == nil)
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 200,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 204,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 205,
+            confirmationDelay: 5
+        ) == .clearAsUnhidden)
+    }
+
+    @Test("A drifting hidden flag without visibility evidence retains completion")
+    func driftWithoutVisibilityDoesNotRearmAutomation() {
+        var state = HideCompletionRuntimeState()
+
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: false,
+            at: 100,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: false,
+            at: 1_000,
+            confirmationDelay: 5
+        ) == .retainCompletion)
+        #expect(state.firstObservedNotHiddenAt == nil)
+    }
+
+    @Test("A zero grace interval clears on the first non-hidden observation")
+    func zeroGraceClearsImmediately() {
+        var state = HideCompletionRuntimeState()
+
+        #expect(state.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 100,
+            confirmationDelay: 0
+        ) == .clearAsUnhidden)
+    }
+}
+
 @Suite("Runtime application identity")
 struct RuntimeApplicationIdentityTests {
     private let fallbackA = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!

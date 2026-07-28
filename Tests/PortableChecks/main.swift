@@ -107,6 +107,145 @@ expect(
 )
 
 expect(
+    HideActionPresentationPolicy.presentation(
+        isHidden: false,
+        hasConfirmedCompletion: false,
+        hasOperationInFlight: true
+    ) == .inProgress &&
+        HideActionPresentationPolicy.presentation(
+            isHidden: false,
+            hasConfirmedCompletion: false,
+            hasOperationInFlight: false
+        ) == .none,
+    "only a real hide operation is presented as in progress"
+)
+expect(
+    HideActionPresentationPolicy.presentation(
+        isHidden: false,
+        hasConfirmedCompletion: true,
+        hasOperationInFlight: false
+    ) == .completed &&
+        HideActionPresentationPolicy.presentation(
+            isHidden: true,
+            hasConfirmedCompletion: false,
+            hasOperationInFlight: true
+        ) == .completed,
+    "confirmed or observed hiding is presented as completed"
+)
+expect(
+    HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+        hasOperationToken: true,
+        hasRowHideOwnership: false,
+        hasConfirmedCompletion: false,
+        isAlreadyHandled: false
+    ) &&
+        HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: false,
+            hasRowHideOwnership: true,
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: false
+        ) &&
+        HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: false,
+            hasRowHideOwnership: false,
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: true
+        ) &&
+        !HideCompletionLifecyclePolicy.shouldPreserveOnDeactivate(
+            hasOperationToken: false,
+            hasRowHideOwnership: false,
+            hasConfirmedCompletion: true,
+            isAlreadyHandled: false
+        ),
+    "hide-driven deactivation preserves only an owned hide lifecycle"
+)
+expect(
+    !AutomaticHideAttemptPolicy.shouldAttempt(
+        hasConfirmedCompletion: true,
+        isAlreadyHandled: false,
+        canRetry: true,
+        elapsed: 600,
+        actionDelay: 300
+    ) &&
+        AutomaticHideAttemptPolicy.shouldAttempt(
+            hasConfirmedCompletion: false,
+            isAlreadyHandled: false,
+            canRetry: true,
+            elapsed: 300,
+            actionDelay: 300
+        ),
+    "a confirmed hide completion blocks a repeated automatic hide"
+)
+var hideCompletionDrift = HideCompletionRuntimeState()
+expect(
+    hideCompletionDrift.observe(
+        isHidden: false,
+        hasVisibleTransitionEvidence: true,
+        at: 100,
+        confirmationDelay: 5
+    ) == .retainCompletion &&
+        hideCompletionDrift.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 104.999,
+            confirmationDelay: 5
+        ) == .retainCompletion &&
+        hideCompletionDrift.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 105,
+            confirmationDelay: 5
+        ) == .clearAsUnhidden,
+    "a sustained non-hidden state clears a stale hide completion"
+)
+var resetHideCompletionDrift = HideCompletionRuntimeState()
+_ = resetHideCompletionDrift.observe(
+    isHidden: false,
+    hasVisibleTransitionEvidence: true,
+    at: 100,
+    confirmationDelay: 5
+)
+_ = resetHideCompletionDrift.observe(
+    isHidden: true,
+    hasVisibleTransitionEvidence: false,
+    at: 104,
+    confirmationDelay: 5
+)
+expect(
+    resetHideCompletionDrift.firstObservedNotHiddenAt == nil &&
+        resetHideCompletionDrift.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 200,
+            confirmationDelay: 5
+        ) == .retainCompletion &&
+        resetHideCompletionDrift.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: true,
+            at: 205,
+            confirmationDelay: 5
+        ) == .clearAsUnhidden,
+    "a hidden observation resets stale-state confirmation"
+)
+var invisibleHideCompletionDrift = HideCompletionRuntimeState()
+expect(
+    invisibleHideCompletionDrift.observe(
+        isHidden: false,
+        hasVisibleTransitionEvidence: false,
+        at: 100,
+        confirmationDelay: 5
+    ) == .retainCompletion &&
+        invisibleHideCompletionDrift.observe(
+            isHidden: false,
+            hasVisibleTransitionEvidence: false,
+            at: 1_000,
+            confirmationDelay: 5
+        ) == .retainCompletion &&
+        invisibleHideCompletionDrift.firstObservedNotHiddenAt == nil,
+    "a drifting hidden flag without visibility evidence stays completed"
+)
+
+expect(
     !AutomationDefaults.unconfiguredHideEnabled &&
         !AutomationDefaults.preQuitHideEnabled &&
         !AutomationDefaults.stageManagerGroupProtectionEnabled &&
