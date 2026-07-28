@@ -65,7 +65,7 @@
       "version": "0.6.4",
       "build": 18,
       "minimumSystemVersion": "13.0",
-      "publishedAt": "2026-07-28T09:56:42Z",
+      "publishedAt": "2026-07-28T10:19:03Z",
       "releaseNotes": {
         "zh-CN": "修复部分 App（尤其是微信）实际已经隐藏后，状态仍长期停留在“正在隐藏”的问题。现在只有真实隐藏操作执行期间才显示处理中；隐藏完成状态不会再被不稳定的系统隐藏标记覆盖，也不会在下一个计时周期重复触发，App 重新显示或激活后仍会正常重新计时。同时将设置窗口由 410pt 小幅加宽至 440pt，减少中英文说明文字换行。",
         "en": "Fixes an issue where some apps, especially WeChat, could remain stuck on “Hiding…” long after they were already hidden. Progress is now shown only while a real hide operation is running; confirmed completion survives unstable system hidden-state flags and prevents the next timer interval from hiding the app again, while normal timing still resumes after the app is shown or activated. The Settings window is also widened slightly from 410 pt to 440 pt to reduce wrapping in Chinese and English descriptions."

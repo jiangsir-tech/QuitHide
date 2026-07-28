@@ -1,18 +1,18 @@
 {
-  "version": "0.6.3",
-  "build": 17,
+  "version": "0.6.4",
+  "build": 18,
   "minimumSystemVersion": "13.0",
-  "publishedAt": "2026-07-28T05:50:24Z",
+  "publishedAt": "2026-07-28T10:19:03Z",
   "releaseNotes": {
-    "zh-CN": "修复 v0.6.2 安装盘在已有同名 QuitHide 磁盘映像挂载时可能丢失拖拽安装提示的问题。发布构建现在会阻止同名卷冲突，并在打包和公证后验证 Finder 布局、背景图与 Applications 链接，避免不完整安装盘再次发布。App 功能未发生变化。",
-    "en": "Fixes an issue where the v0.6.2 disk image could lose its drag-to-Applications guidance when another QuitHide disk image with the same volume name was already mounted. Release builds now block same-name volume conflicts and verify the Finder layout, background, and Applications link after packaging and notarization. App functionality is unchanged."
+    "zh-CN": "修复部分 App（尤其是微信）实际已经隐藏后，状态仍长期停留在“正在隐藏”的问题。现在只有真实隐藏操作执行期间才显示处理中；隐藏完成状态不会再被不稳定的系统隐藏标记覆盖，也不会在下一个计时周期重复触发，App 重新显示或激活后仍会正常重新计时。同时将设置窗口由 410pt 小幅加宽至 440pt，减少中英文说明文字换行。",
+    "en": "Fixes an issue where some apps, especially WeChat, could remain stuck on “Hiding…” long after they were already hidden. Progress is now shown only while a real hide operation is running; confirmed completion survives unstable system hidden-state flags and prevents the next timer interval from hiding the app again, while normal timing still resumes after the app is shown or activated. The Settings window is also widened slightly from 410 pt to 440 pt to reduce wrapping in Chinese and English descriptions."
   },
-  "githubReleaseURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.3",
+  "githubReleaseURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.4",
   "file": {
-    "name": "QuitHide-v0.6.3-universal.dmg",
-    "size": 3955143,
-    "sha256": "ab9f28939fa0f16a1423e6653e0ca3d78a367ce712c5c9ee1f6d681880db8a48",
-    "directDownloadURL": "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.3/QuitHide-v0.6.3-universal.dmg",
-    "githubDownloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/download/v0.6.3/QuitHide-v0.6.3-universal.dmg"
+    "name": "QuitHide-v0.6.4-universal.dmg",
+    "size": 3988391,
+    "sha256": "86a37fad46aaa8aaa163e6e201069df59debe4859c6829d94012fb0f30f5cd5a",
+    "directDownloadURL": "https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.4/QuitHide-v0.6.4-universal.dmg",
+    "githubDownloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/download/v0.6.4/QuitHide-v0.6.4-universal.dmg"
   }
 }
