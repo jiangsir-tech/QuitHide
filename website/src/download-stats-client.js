@@ -1,3 +1,5 @@
+export const DOWNLOAD_COUNT_REVEAL_THRESHOLD = 2_000;
+
 export async function refreshDownloadStats({
   root,
   url,
@@ -13,6 +15,9 @@ export async function refreshDownloadStats({
   }).filter((value) => value !== null);
   if (currentValues.length === 0) return false;
   const current = Math.max(...currentValues);
+  const rows = [...root.querySelectorAll("[data-download-count-row]")];
+  setDownloadCountVisibility(rows, current);
+
   const response = await fetchImpl(url, {
     cache: "no-store",
     credentials: "omit",
@@ -27,7 +32,15 @@ export async function refreshDownloadStats({
     counter.dataset.downloadCount = String(stats.total);
     counter.textContent = formatted;
   });
+  setDownloadCountVisibility(rows, stats.total);
   return true;
+}
+
+function setDownloadCountVisibility(rows, total) {
+  const hidden = total < DOWNLOAD_COUNT_REVEAL_THRESHOLD;
+  rows.forEach((row) => {
+    row.hidden = hidden;
+  });
 }
 
 export function installDirectDownloadLogging({ root, url, fetchImpl = fetch }) {

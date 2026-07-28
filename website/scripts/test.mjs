@@ -117,12 +117,12 @@ for (const route of ["/changelog/", "/en/changelog/"]) {
 verifyDownloadCountMarkup(
   "Chinese page",
   chinese,
-  "累计下载 24 次 · 每日更新",
+  "累计下载 24 次",
 );
 verifyDownloadCountMarkup(
   "English page",
   english,
-  "24 cumulative downloads · Updated daily",
+  "24 cumulative downloads",
 );
 
 const directDownloadURL = new URL(release.file.directDownloadURL);
@@ -145,7 +145,7 @@ if (
 }
 
 for (const copy of [
-  "按设定规则自动退出或隐藏 Mac 上打开的 App",
+  "按设定时间自动退出或隐藏 Mac 上打开的 App",
   "节省人的精力，节省 Mac 的性能。",
 ]) {
   if (!chineseText.includes(copy)) throw new Error(`Chinese hero is missing approved copy: ${copy}`);
@@ -340,19 +340,33 @@ function verifyDirectDownloadLinks(label, content, expectedURL) {
 }
 
 function verifyDownloadCountMarkup(label, content, expectedCopy) {
+  const row = content.match(
+    /<p\b([^>]*\bdata-download-count-row\b[^>]*)>([\s\S]*?)<\/p>/i,
+  );
+  if (!row) {
+    throw new Error(`${label} must contain one threshold-controlled download-count row`);
+  }
+  if (!/\bhidden\b/i.test(row[1])) {
+    throw new Error(`${label} download count must stay hidden below the reveal threshold`);
+  }
+
   const counters = [...content.matchAll(
     /<([a-z][a-z0-9]*)\b([^>]*)\bdata-download-count\s*=\s*(?:"([^"]*)"|'([^']*)')([^>]*)>([^<]*)<\/\1>/gi,
   )];
   if (counters.length !== 1) {
-    throw new Error(`${label} must contain exactly one visible download counter`);
+    throw new Error(`${label} must contain exactly one download counter`);
   }
   const initialValue = counters[0][3] ?? counters[0][4];
   if (initialValue !== "24" || counters[0][6].trim() !== "24") {
     throw new Error(`${label} download counter must render the static fallback value 24`);
   }
-  const visibleText = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  if (!visibleText.includes(expectedCopy)) {
-    throw new Error(`${label} is missing the approved daily-updated download label`);
+
+  const rowText = row[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (!rowText.includes(expectedCopy)) {
+    throw new Error(`${label} is missing the approved download-count label`);
+  }
+  if (/每日更新|Updated daily/i.test(rowText)) {
+    throw new Error(`${label} must not describe the download count as updated daily`);
   }
 }
 
