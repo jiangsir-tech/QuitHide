@@ -145,7 +145,7 @@ if (
 }
 
 for (const copy of [
-  "按设定时间自动退出或隐藏 Mac 上打开的 App",
+  "自动隐藏或退出暂时不用的 Mac App",
   "节省人的精力，节省 Mac 的性能。",
 ]) {
   if (!chineseText.includes(copy)) throw new Error(`Chinese hero is missing approved copy: ${copy}`);
