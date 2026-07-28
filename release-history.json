@@ -55,7 +55,7 @@
       "version": "0.6.3",
       "build": 17,
       "minimumSystemVersion": "13.0",
-      "publishedAt": "2026-07-28T05:35:50Z",
+      "publishedAt": "2026-07-28T05:50:24Z",
       "releaseNotes": {
         "zh-CN": "修复 v0.6.2 安装盘在已有同名 QuitHide 磁盘映像挂载时可能丢失拖拽安装提示的问题。发布构建现在会阻止同名卷冲突，并在打包和公证后验证 Finder 布局、背景图与 Applications 链接，避免不完整安装盘再次发布。App 功能未发生变化。",
         "en": "Fixes an issue where the v0.6.2 disk image could lose its drag-to-Applications guidance when another QuitHide disk image with the same volume name was already mounted. Release builds now block same-name volume conflicts and verify the Finder layout, background, and Applications link after packaging and notarization. App functionality is unchanged."
