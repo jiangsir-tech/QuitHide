@@ -100,9 +100,9 @@
 "status.action.failed_retry" = "{action} Failed · Will Retry";
 "status.action.failed_manual" = "{action} Failed · Try Manually";
 "status.active" = "In Use · Waiting to Start";
+"status.in_use" = "In Use";
 "status.stage_manager.group_protected" = "Protected by Stage Manager Group";
 "status.stage_manager.unavailable_paused" = "Group Detection Unavailable · Automation Paused";
-"status.screen_visibility.protected" = "Protected While Visible on Screen";
 "status.window_protection.waiting_for_stability" = "Windows Are Changing · Automation Temporarily Paused";
 "status.window_protection.unavailable_paused" = "Window Protection Unavailable · Automation Paused";
 "status.waiting_for_background" = "Waiting for Background";

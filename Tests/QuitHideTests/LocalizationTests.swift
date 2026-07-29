@@ -154,6 +154,12 @@ struct LocalizationResourceTests {
         #expect(english.text(.settingsWebsite) == "QuitHide Website")
         #expect(chinese.text(.statusQuitNotCompleted) == "退出未完成")
         #expect(english.text(.statusQuitNotCompleted) == "Quit Not Completed")
+        #expect(chinese.text(.statusInUse) == "使用中")
+        #expect(english.text(.statusInUse) == "In Use")
+        #expect(
+            chinese.text(.statusStageManagerGroupProtected) ==
+                "台前调度分组保护中"
+        )
         #expect(
             !chinese.text(.warningLoginItemNotFound).contains("应用程序")
         )

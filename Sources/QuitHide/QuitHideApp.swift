@@ -277,6 +277,8 @@ final class AppModel: ObservableObject {
     private var preQuitHideStates: [String: PreQuitHideRuntimeState] = [:]
     private var timingSuspension = TimingSuspension()
     private var automaticallyProtectedBundleIdentifiers: Set<String> = []
+    private var stageManagerHoldReasonsByBundleIdentifier:
+        [String: Set<StageManagerHoldReason>] = [:]
     private var pendingAutomaticProtectionReleaseCandidate: Set<String>?
     private var activeAutomaticWindowProtectionMode: AutomaticWindowProtectionMode = .legacy
     private var acceptedScreenVisibilityFingerprint:
@@ -792,11 +794,16 @@ final class AppModel: ObservableObject {
                 isError: false
             )
         }
-        if automaticallyProtectedBundleIdentifiers.contains(bundleID) {
-            let statusKey: L10n.Key = activeAutomaticWindowProtectionMode ==
-                .screenVisibility
-                    ? .statusScreenVisibilityProtected
-                    : .statusStageManagerGroupProtected
+        if let protectedStatus = AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: activeAutomaticWindowProtectionMode,
+            bundleIsProtected:
+                automaticallyProtectedBundleIdentifiers.contains(bundleID),
+            stageManagerHoldReasons:
+                stageManagerHoldReasonsByBundleIdentifier[bundleID] ?? []
+        ) {
+            let statusKey: L10n.Key = protectedStatus == .inUse
+                ? .statusInUse
+                : .statusStageManagerGroupProtected
             return AppAutomationStatus(
                 text: localized(statusKey),
                 isProtected: true
@@ -2415,6 +2422,7 @@ final class AppModel: ObservableObject {
         guard automaticWindowProtectionIsConfigured else {
             automaticWindowProtectionIsUnavailable = false
             activeAutomaticWindowProtectionMode = .legacy
+            stageManagerHoldReasonsByBundleIdentifier = [:]
             acceptedScreenVisibilityFingerprint = nil
             applyAutomaticallyProtectedBundleIdentifiers(
                 [],
@@ -2573,6 +2581,7 @@ final class AppModel: ObservableObject {
             screenVisibilityProtectionStatus = .off
             automaticWindowProtectionIsUnavailable = false
             activeAutomaticWindowProtectionMode = .legacy
+            stageManagerHoldReasonsByBundleIdentifier = [:]
             acceptedScreenVisibilityFingerprint = nil
             applyAutomaticallyProtectedBundleIdentifiers(
                 [],
@@ -2609,6 +2618,7 @@ final class AppModel: ObservableObject {
                 return !automaticWindowProtectionIsUnavailable
             }
             activeAutomaticWindowProtectionMode = .legacy
+            stageManagerHoldReasonsByBundleIdentifier = [:]
             resetStageManagerProtectionReadFailures()
             resetScreenVisibilityProtectionReadFailures()
             acceptedScreenVisibilityFingerprint = nil
@@ -2660,6 +2670,7 @@ final class AppModel: ObservableObject {
                     Set(reasonsByBundleIdentifier.keys),
                     requireStableRelease: true
                 )
+                applyStageManagerHoldReasons(reasonsByBundleIdentifier)
                 let protectedAutomaticAppCount =
                     automaticallyProtectedBundleIdentifiers.filter {
                         effectivePolicy(for: $0).isAutomated
@@ -2669,6 +2680,7 @@ final class AppModel: ObservableObject {
                 )
             case let .unavailable(reason):
                 pendingAutomaticProtectionReleaseCandidate = nil
+                stageManagerHoldReasonsByBundleIdentifier = [:]
                 automaticWindowProtectionIsUnavailable = true
                 suspendTiming(
                     for: .automaticWindowProtectionUnavailable,
@@ -2685,6 +2697,7 @@ final class AppModel: ObservableObject {
                 }
                 return false
             case .legacy:
+                stageManagerHoldReasonsByBundleIdentifier = [:]
                 automaticWindowProtectionIsUnavailable = true
                 suspendTiming(
                     for: .automaticWindowProtectionUnavailable,
@@ -2703,6 +2716,7 @@ final class AppModel: ObservableObject {
             return true
 
         case .screenVisibility:
+            stageManagerHoldReasonsByBundleIdentifier = [:]
             resetStageManagerProtectionReadFailures()
             stageManagerGroupProtectionStatus = stageManagerGroupProtectionEnabled
                 ? .dormant
@@ -2805,6 +2819,7 @@ final class AppModel: ObservableObject {
                 return false
             }
             pendingAutomaticProtectionReleaseCandidate = nil
+            stageManagerHoldReasonsByBundleIdentifier = [:]
             automaticWindowProtectionIsUnavailable = true
             activeAutomaticWindowProtectionMode = .unavailable
             acceptedScreenVisibilityFingerprint = nil
@@ -2877,6 +2892,32 @@ final class AppModel: ObservableObject {
                 restartTimer: true
             )
         }
+    }
+
+    private func applyStageManagerHoldReasons(
+        _ proposedReasonsByBundleIdentifier:
+            [String: Set<StageManagerHoldReason>]
+    ) {
+        var nextReasonsByBundleIdentifier:
+            [String: Set<StageManagerHoldReason>] = [:]
+
+        for bundleIdentifier in automaticallyProtectedBundleIdentifiers {
+            if let proposedReasons =
+                proposedReasonsByBundleIdentifier[bundleIdentifier] {
+                nextReasonsByBundleIdentifier[bundleIdentifier] =
+                    proposedReasons
+            } else if let retainedReasons =
+                stageManagerHoldReasonsByBundleIdentifier[bundleIdentifier] {
+                // A protected bundle is released only after two matching
+                // snapshots. Keep its last reason during that brief debounce
+                // so the row status does not flicker between observations.
+                nextReasonsByBundleIdentifier[bundleIdentifier] =
+                    retainedReasons
+            }
+        }
+
+        stageManagerHoldReasonsByBundleIdentifier =
+            nextReasonsByBundleIdentifier
     }
 
     private func clearAutomaticRuntimeStateForWindowProtection(
@@ -3990,6 +4031,73 @@ private struct ForceQuitRequest: Identifiable {
     let requestedTargets: [RunningAppItem]
 }
 
+private struct ForceQuitConfirmationDialog: View {
+    let title: String
+    let message: String
+    let cancelTitle: String
+    let confirmTitle: String
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+    @FocusState private var cancelIsFocused: Bool
+
+    // A deep red keeps the destructive action unmistakable while preserving
+    // strong contrast with the white label in both light and dark appearances.
+    private let destructiveBackground = Color(
+        red: 176 / 255,
+        green: 20 / 255,
+        blue: 26 / 255
+    )
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button(action: onCancel) {
+                    Text(cancelTitle)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .keyboardShortcut(.cancelAction)
+                .focused($cancelIsFocused)
+
+                Button(action: onConfirm) {
+                    Text(confirmTitle)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(destructiveBackground)
+            }
+        }
+        .padding(20)
+        .frame(width: 320)
+        .background(
+            .regularMaterial,
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.primary.opacity(0.16), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 18, y: 8)
+        .onAppear {
+            cancelIsFocused = true
+        }
+    }
+}
+
 struct MenuContentView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var updateController: SparkleUpdateController
@@ -4221,7 +4329,7 @@ struct MenuContentView: View {
                     }
                 }
                 .padding(.horizontal, 8)
-                .frame(width: 174, height: 28)
+                .frame(width: 190, height: 28)
                 .background(
                     Color.primary.opacity(0.07),
                     in: RoundedRectangle(cornerRadius: 7, style: .continuous)
@@ -4413,27 +4521,44 @@ struct MenuContentView: View {
                 .padding(12)
             }
         }
-        .frame(width: 410, height: menuHeight, alignment: .top)
+        .frame(width: 440, height: menuHeight, alignment: .top)
         .environment(\.locale, model.effectiveLocale)
         .animation(.easeOut(duration: 0.18), value: updateController.pendingUpdateVersion)
-        .alert(item: $pendingForceQuitRequest) { request in
-            Alert(
-                title: Text(model.localized(.dialogForceQuitTitle, replacements: [
-                    "name": request.appName
-                ])),
-                message: Text(model.localized(.dialogForceQuitMessage)),
-                primaryButton: .destructive(Text(model.localized(.dialogForceQuitConfirm))) {
-                    pendingForceQuitRequest = nil
-                    model.forceQuitImmediately(
-                        named: request.appName,
-                        requestedTargets: request.requestedTargets
+        .allowsHitTesting(pendingForceQuitRequest == nil)
+        .accessibilityHidden(pendingForceQuitRequest != nil)
+        .overlay {
+            if let request = pendingForceQuitRequest {
+                ZStack {
+                    Color.black
+                        .opacity(0.18)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {}
+
+                    ForceQuitConfirmationDialog(
+                        title: model.localized(.dialogForceQuitTitle, replacements: [
+                            "name": request.appName
+                        ]),
+                        message: model.localized(.dialogForceQuitMessage),
+                        cancelTitle: model.localized(.dialogCancel),
+                        confirmTitle: model.localized(.dialogForceQuitConfirm),
+                        onCancel: {
+                            pendingForceQuitRequest = nil
+                        },
+                        onConfirm: {
+                            pendingForceQuitRequest = nil
+                            model.forceQuitImmediately(
+                                named: request.appName,
+                                requestedTargets: request.requestedTargets
+                            )
+                        }
                     )
-                },
-                secondaryButton: .cancel(Text(model.localized(.dialogCancel))) {
-                    pendingForceQuitRequest = nil
+                    .id(request.id)
                 }
-            )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
         }
+        .animation(.easeOut(duration: 0.14), value: pendingForceQuitRequest != nil)
         .onChange(of: pendingForceQuitLiveTargetCount) { targetCount in
             guard pendingForceQuitRequest != nil, targetCount == 0 else { return }
             pendingForceQuitRequest = nil

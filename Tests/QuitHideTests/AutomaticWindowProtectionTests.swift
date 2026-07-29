@@ -48,6 +48,54 @@ struct AutomaticWindowProtectionTests {
         ) == .legacy)
     }
 
+    @Test("Foreground Stage Manager windows are presented as in use")
+    func foregroundStageManagerWindowsAreInUse() {
+        #expect(AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: .stageManager,
+            bundleIsProtected: true,
+            stageManagerHoldReasons: [.foregroundGroup]
+        ) == .inUse)
+
+        #expect(AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: .stageManager,
+            bundleIsProtected: true,
+            stageManagerHoldReasons: [
+                .foregroundGroup,
+                .explicitIgnoreAnchor
+            ]
+        ) == .inUse)
+    }
+
+    @Test("Only an Ignore-anchored sidebar group uses the group protection label")
+    func sidebarIgnoreGroupUsesGroupProtectionLabel() {
+        #expect(AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: .stageManager,
+            bundleIsProtected: true,
+            stageManagerHoldReasons: [.explicitIgnoreAnchor]
+        ) == .stageManagerGroupProtected)
+
+        #expect(AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: .stageManager,
+            bundleIsProtected: false,
+            stageManagerHoldReasons: []
+        ) == nil)
+    }
+
+    @Test("Visible windows use the same in-use label while Stage Manager is off")
+    func screenVisibleWindowsAreInUse() {
+        #expect(AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: .screenVisibility,
+            bundleIsProtected: true,
+            stageManagerHoldReasons: []
+        ) == .inUse)
+
+        #expect(AutomaticWindowProtectionRowStatusPolicy.status(
+            activeMode: .unavailable,
+            bundleIsProtected: true,
+            stageManagerHoldReasons: [.foregroundGroup]
+        ) == nil)
+    }
+
     @Test("An uncertain Stage Manager state fails closed")
     func uncertainStageManagerStateFailsClosed() {
         #expect(mode(

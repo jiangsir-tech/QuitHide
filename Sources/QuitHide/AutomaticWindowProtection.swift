@@ -7,6 +7,36 @@ enum AutomaticWindowProtectionMode: Sendable, Equatable {
     case unavailable
 }
 
+enum AutomaticWindowProtectionRowStatus: Sendable, Equatable {
+    case inUse
+    case stageManagerGroupProtected
+}
+
+enum AutomaticWindowProtectionRowStatusPolicy {
+    static func status(
+        activeMode: AutomaticWindowProtectionMode,
+        bundleIsProtected: Bool,
+        stageManagerHoldReasons: Set<StageManagerHoldReason>
+    ) -> AutomaticWindowProtectionRowStatus? {
+        guard bundleIsProtected else { return nil }
+
+        switch activeMode {
+        case .screenVisibility:
+            return .inUse
+        case .stageManager:
+            if stageManagerHoldReasons.contains(.foregroundGroup) {
+                return .inUse
+            }
+            if stageManagerHoldReasons.contains(.explicitIgnoreAnchor) {
+                return .stageManagerGroupProtected
+            }
+            return nil
+        case .legacy, .unavailable:
+            return nil
+        }
+    }
+}
+
 enum AutomaticWindowProtectionModePolicy {
     static func mode(
         stageManagerGroupProtectionEnabled: Bool,
