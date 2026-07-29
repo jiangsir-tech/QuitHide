@@ -1,5 +1,7 @@
 export const INITIAL_GITHUB_DOWNLOADS = 24;
 export const DIRECT_EVENT_PREFIX = "events/direct/";
+export const DIRECT_EVENT_SLOT_COUNT = 1_024;
+export const DIRECT_EVENT_ESTIMATE_CAP = 4_096;
 export const INITIAL_GITHUB_ASSET_LEDGER = Object.freeze({
   "490267983": 4,
   "490069831": 10,
@@ -79,7 +81,24 @@ export function directEventKey(timestamp, uuid) {
   if (!Number.isFinite(timestamp)) throw new Error("Invalid direct-download event timestamp");
   if (typeof uuid !== "string" || uuid.length === 0) throw new Error("Invalid direct-download event id");
   const day = new Date(timestamp).toISOString().slice(0, 10);
-  return `${DIRECT_EVENT_PREFIX}${day}/${timestamp}-${uuid}.event`;
+  const slot = stableHash32(uuid) % DIRECT_EVENT_SLOT_COUNT;
+  return `${DIRECT_EVENT_PREFIX}${day}/slot-${String(slot).padStart(4, "0")}.event`;
+}
+
+export function estimateDirectEventSlotCount(occupiedSlots) {
+  if (
+    !Number.isSafeInteger(occupiedSlots)
+    || occupiedSlots < 0
+    || occupiedSlots > DIRECT_EVENT_SLOT_COUNT
+  ) {
+    throw new Error("Invalid direct-download slot count");
+  }
+  if (occupiedSlots === 0) return 0;
+  if (occupiedSlots === DIRECT_EVENT_SLOT_COUNT) return DIRECT_EVENT_ESTIMATE_CAP;
+  const estimate = Math.round(
+    -DIRECT_EVENT_SLOT_COUNT * Math.log1p(-occupiedSlots / DIRECT_EVENT_SLOT_COUNT),
+  );
+  return Math.min(DIRECT_EVENT_ESTIMATE_CAP, Math.max(occupiedSlots, estimate));
 }
 
 export function normalizeAssetLedger(value) {
@@ -89,4 +108,13 @@ export function normalizeAssetLedger(value) {
     if (/^\d+$/.test(id) && Number.isSafeInteger(count) && count >= 0) counts[id] = count;
   }
   return counts;
+}
+
+function stableHash32(value) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
 }

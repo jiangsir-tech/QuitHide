@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   collectStableDmgAssetCounts,
+  DIRECT_EVENT_ESTIMATE_CAP,
+  DIRECT_EVENT_SLOT_COUNT,
   directEventKey,
+  estimateDirectEventSlotCount,
   githubDownloadTotal,
   INITIAL_GITHUB_ASSET_LEDGER,
   initialDownloadStats,
@@ -129,12 +132,34 @@ test("stored data is normalized to safe monotonic defaults", () => {
   }), initialDownloadStats());
 });
 
-test("direct event keys use the UTC day and unique event id", () => {
+test("direct event keys use bounded daily slots instead of attacker-proportional objects", () => {
   const timestamp = Date.parse("2026-07-26T23:59:58.123Z");
-  assert.equal(
-    directEventKey(timestamp, "event-123"),
-    `events/direct/2026-07-26/${timestamp}-event-123.event`,
+  const keys = new Set(
+    Array.from({ length: DIRECT_EVENT_SLOT_COUNT * 10 }, (_, index) => (
+      directEventKey(timestamp, `event-${index}`)
+    )),
   );
+
+  assert.ok(keys.size <= DIRECT_EVENT_SLOT_COUNT);
+  assert.ok([...keys].every((key) => (
+    /^events\/direct\/2026-07-26\/slot-\d{4}\.event$/.test(key)
+  )));
   assert.throws(() => directEventKey(Number.NaN, "event-123"), /timestamp/);
   assert.throws(() => directEventKey(timestamp, ""), /event id/);
+});
+
+test("bounded direct-event slots produce a capped monotonic count estimate", () => {
+  assert.equal(estimateDirectEventSlotCount(0), 0);
+  assert.equal(estimateDirectEventSlotCount(1), 1);
+  assert.ok(estimateDirectEventSlotCount(100) >= 100);
+  assert.ok(estimateDirectEventSlotCount(100) < 120);
+  assert.equal(
+    estimateDirectEventSlotCount(DIRECT_EVENT_SLOT_COUNT),
+    DIRECT_EVENT_ESTIMATE_CAP,
+  );
+  assert.throws(() => estimateDirectEventSlotCount(-1), /slot count/);
+  assert.throws(
+    () => estimateDirectEventSlotCount(DIRECT_EVENT_SLOT_COUNT + 1),
+    /slot count/,
+  );
 });
