@@ -1,7 +1,9 @@
 import {
   collectStableDmgAssetCounts,
+  DIRECT_EVENT_SLOT_COUNT,
   directEventKey,
   DIRECT_EVENT_PREFIX,
+  estimateDirectEventSlotCount,
   githubDownloadTotal,
   mergeAssetLedger,
   mergePublicStats,
@@ -13,6 +15,7 @@ export const DOWNLOAD_STATS_STORE = "quithide-download-stats";
 export const GITHUB_LEDGER_KEY = "state/github-assets.json";
 export const PUBLIC_STATS_KEY = "public/download-stats.json";
 export const DIRECT_DAILY_PREFIX = "daily/direct/";
+export const REFRESH_ATTEMPT_PREFIX = "refresh/attempts/";
 export const MINIMUM_REFRESH_INTERVAL_MS = 20 * 60 * 60 * 1000;
 
 const GITHUB_RELEASES_API = "https://api.github.com/repos/jiangsir-tech/QuitHide/releases";
@@ -74,6 +77,7 @@ export async function refreshDownloadStats({
   const timestamp = now();
   const previousStats = await readPublicStats(store);
   if (isFresh(previousStats.updatedAt, timestamp)) return previousStats;
+  if (!await acquireRefreshAttempt(store, timestamp)) return previousStats;
 
   const [ledgerResult, githubResult, directResult] = await Promise.allSettled([
     readJSON(store, GITHUB_LEDGER_KEY),
@@ -143,18 +147,18 @@ export async function aggregateDirectDownloadEvents({ store, timestamp }) {
   const dailyCounts = await readDailyCounts(store, dailyListing?.blobs);
   const archiveBeforeDay = new Date(timestamp - (2 * DAY_MS)).toISOString().slice(0, 10);
 
-  for (const [day, keys] of eventsByDay) {
+  for (const [day, group] of eventsByDay) {
     if (day >= archiveBeforeDay) continue;
     if (!dailyCounts.has(day)) {
-      const count = await createOrReadDailyCount(store, day, keys.length);
+      const count = await createOrReadDailyCount(store, day, directEventCount(group));
       dailyCounts.set(day, count);
     }
-    await deleteBestEffort(store, keys);
+    await deleteBestEffort(store, group.keys);
   }
 
   let direct = [...dailyCounts.values()].reduce((sum, count) => sum + count, 0);
-  for (const [day, keys] of eventsByDay) {
-    if (!dailyCounts.has(day)) direct += keys.length;
+  for (const [day, group] of eventsByDay) {
+    if (!dailyCounts.has(day)) direct += directEventCount(group);
   }
   return direct;
 }
@@ -173,16 +177,43 @@ function isFresh(updatedAt, timestamp) {
   return Number.isFinite(previous) && timestamp - previous < MINIMUM_REFRESH_INTERVAL_MS;
 }
 
+async function acquireRefreshAttempt(store, timestamp) {
+  const window = Math.floor(timestamp / MINIMUM_REFRESH_INTERVAL_MS);
+  const key = `${REFRESH_ATTEMPT_PREFIX}${window}.lock`;
+  try {
+    await store.set(key, "", { onlyIfNew: true, cacheControl: null });
+    return true;
+  } catch (error) {
+    if (error?.code === "PRECONDITION_FAILED") return false;
+    throw error;
+  }
+}
+
 function groupEventKeysByDay(blobs) {
   const values = new Map();
   for (const blob of Array.isArray(blobs) ? blobs : []) {
-    const match = blob?.key?.match(/^events\/direct\/(\d{4}-\d{2}-\d{2})\//);
+    const match = blob?.key?.match(/^events\/direct\/(\d{4}-\d{2}-\d{2})\/(.+)$/);
     if (!match) continue;
-    const keys = values.get(match[1]) ?? [];
-    keys.push(blob.key);
-    values.set(match[1], keys);
+    const group = values.get(match[1]) ?? {
+      keys: [],
+      legacyCount: 0,
+      slots: new Set(),
+    };
+    group.keys.push(blob.key);
+    const slotMatch = match[2].match(/^slot-(\d{4})\.event$/);
+    const slot = slotMatch ? Number(slotMatch[1]) : Number.NaN;
+    if (Number.isSafeInteger(slot) && slot >= 0 && slot < DIRECT_EVENT_SLOT_COUNT) {
+      group.slots.add(slot);
+    } else {
+      group.legacyCount += 1;
+    }
+    values.set(match[1], group);
   }
   return values;
+}
+
+function directEventCount(group) {
+  return group.legacyCount + estimateDirectEventSlotCount(group.slots.size);
 }
 
 async function readDailyCounts(store, blobs) {
