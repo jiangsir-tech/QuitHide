@@ -1,8 +1,8 @@
 {
-  "version": "0.6.6",
-  "build": 20,
+  "version": "0.6.5",
+  "build": 19,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "增强台前调度原生全屏场景下的窗口保护：常规分组读取不可用时，QuitHide 仅在确认前台 App 确实全屏且存在刚刚验证过的侧边栏分组时，沿用进入全屏前的分组状态；没有可靠缓存时继续暂停自动处理，避免误隐藏或误退出。同时采用更保守的初始等待时间：新增自动隐藏规则为 30 分钟，新增自动退出规则为 2 小时，未设置规则 App 的默认隐藏时间和“退出前先隐藏”的初始时间均为 30 分钟；切换规则类型时使用目标规则的默认值。附加规则仍默认关闭，已有规则与升级用户已保存的时间不会被重置。",
-  "releaseNotesEn": "Strengthens window protection for native fullscreen apps under Stage Manager. If normal group reading becomes unavailable, QuitHide continues from the last recently verified sidebar-group state only after confirming that the frontmost app truly fills a display; without a reliable cache, automation remains paused to prevent an unintended hide or quit. This release also adopts more conservative initial delays: new Auto Hide rules use 30 minutes, new Auto Quit rules use 2 hours, and both the default hide delay for apps without a rule and the initial pre-quit hide delay use 30 minutes. Changing rule types applies the target rule’s default. The optional rules remain off by default, and existing rules and saved delays are not reset.",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.6"
+  "releaseNotes": "优化窗口保护状态：台前调度开启时，桌面前台运行的 App 统一显示绿色“使用中”，只有与“不处理”App 组成的侧边栏分组显示“台前调度分组保护中”；台前调度关闭时，屏幕可见的 App 也显示绿色“使用中”。同时提高强制退出确认按钮的文字对比度，并将主菜单由 410pt 加宽至 440pt、搜索框由 174pt 加宽至 190pt，减少拥挤感。",
+  "releaseNotesEn": "Refines window-protection statuses: with Stage Manager enabled, apps running in the foreground show green “In Use,” while only sidebar groups anchored by an Ignore app show “Protected by Stage Manager Group.” With Stage Manager disabled, visible apps also show green “In Use.” This release also improves the Force Quit confirmation button’s text contrast and widens the main menu from 410 pt to 440 pt and the search field from 174 pt to 190 pt to reduce crowding.",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.5"
 }
