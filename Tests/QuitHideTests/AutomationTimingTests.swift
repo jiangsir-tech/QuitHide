@@ -494,6 +494,13 @@ struct AutomationPolicyTests {
         #expect(!AutomationDefaults.screenVisibilityProtectionEnabled)
     }
 
+    @Test("New automation rules use conservative default timing")
+    func conservativeDefaultTiming() {
+        #expect(AutomationDefaults.defaultHideMinutes == 30)
+        #expect(AutomationDefaults.defaultQuitMinutes == 120)
+        #expect(AutomationDefaults.preQuitHideMinutes == 30)
+    }
+
     @Test("Rule picker order matches the visible section semantics")
     func rulePickerOrder() {
         #expect(AutoAction.rulePickerOrder == [.ignore, .unset, .hide, .quit])
@@ -532,12 +539,12 @@ struct AutomationPolicyTests {
         #expect(AutomationPolicy.idleMinutes(
             explicitAction: .unset,
             explicitMinutes: 20,
-            defaultHideMinutes: 5
-        ) == 5)
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes
+        ) == 30)
         #expect(AutomationPolicy.idleMinutes(
             explicitAction: .hide,
             explicitMinutes: 20,
-            defaultHideMinutes: 5
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes
         ) == 20)
     }
 }

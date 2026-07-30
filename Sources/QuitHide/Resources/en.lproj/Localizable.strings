@@ -133,7 +133,7 @@
 "settings.default_hide.help" = "How long an app without a rule stays in the background before being hidden";
 "settings.pre_quit_hide.enabled" = "Hide Apps before Automatic Quit";
 "settings.pre_quit_hide.delay" = "Pre-Quit Hide Delay";
-"settings.pre_quit_hide.help" = "How long an Automatic Quit app stays in the background before being hidden";
+"settings.pre_quit_hide.help" = "Measured from when the app leaves the foreground. It hides only when this delay is shorter than the app's quit delay; the quit deadline does not change.";
 "settings.stage_manager_protection.enabled" = "Protect Stage Manager Groups";
 "settings.stage_manager_protection.help" = "When a group contains an app set to Ignore, QuitHide will not automatically hide or quit the other apps in that group. A foreground group made entirely of automatic rules also starts its separate timers only after moving to the sidebar. This applies only while Stage Manager is on. Accessibility is used only to read groups, not to move or regroup windows.";
 "settings.stage_manager_protection.checking" = "Detecting Stage Manager groups…";

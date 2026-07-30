@@ -2,6 +2,7 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import Foundation
+import OSLog
 
 protocol StageManagerGroupingProviding: Sendable {
     func readGroupingState() async -> StageManagerGroupingState
@@ -43,6 +44,11 @@ enum StageManagerAXAttributeReadPolicy {
 }
 
 actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
+    private static let logger = Logger(
+        subsystem: "com.jiangsir.quithide",
+        category: "stage-manager"
+    )
+
     private enum StageManagerEnabledState {
         case enabled
         case disabled
@@ -68,6 +74,16 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
         let isOnscreen: Bool
     }
 
+    private struct SidebarCache {
+        let groups: [StageManagerAppGroup]
+        let capturedAt: TimeInterval
+    }
+
+    private struct FullscreenFallbackSession {
+        let context: StageManagerFullscreenContext
+        let snapshot: StageManagerGroupingSnapshot
+    }
+
     private enum ReadError: Error {
         case windowManagerUnavailable
         case accessibilityFailure(AXError)
@@ -75,14 +91,37 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
         case windowListUnavailable
         case unmappedWindow
         case ambiguousDisplay
+        case unstableSnapshot
     }
+
+    private enum UnavailableReason: String {
+        case stageManagerStateUnavailable = "stage_manager_state_unavailable"
+        case pointerInteraction = "pointer_interaction"
+        case unstableSnapshot = "unstable_snapshot"
+        case windowManagerUnavailable = "window_manager_unavailable"
+        case accessibilityFailure = "accessibility_failure"
+        case malformedAccessibilityTree = "malformed_accessibility_tree"
+        case windowListUnavailable = "window_list_unavailable"
+        case unmappedWindow = "unmapped_window"
+        case ambiguousDisplay = "ambiguous_display"
+        case fullscreenCacheUnavailable = "fullscreen_cache_unavailable"
+        case cancelled = "cancelled"
+        case unexpectedFailure = "unexpected_failure"
+    }
+
+    private var sidebarCache: SidebarCache?
+    private var fullscreenFallbackSession: FullscreenFallbackSession?
+    private var lastUnavailableReason: UnavailableReason?
 
     func readGroupingState() async -> StageManagerGroupingState {
         switch Self.stageManagerEnabledState {
         case .disabled:
+            sidebarCache = nil
+            fullscreenFallbackSession = nil
+            clearUnavailableReasonIfNeeded()
             return .disabled
         case .unavailable:
-            return .unavailable
+            return unavailable(.stageManagerStateUnavailable)
         case .enabled:
             break
         }
@@ -93,7 +132,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
                 .combinedSessionState,
                 button: .left
             ) else {
-                return .unavailable
+                return unavailable(.pointerInteraction)
             }
             let frontmostPIDBefore = NSWorkspace.shared.frontmostApplication?.processIdentifier
             let firstAXSnapshot = try readAXSnapshot()
@@ -118,7 +157,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
                       .combinedSessionState,
                       button: .left
                   ) else {
-                return .unavailable
+                throw ReadError.unstableSnapshot
             }
 
             let firstGroupingSnapshot = try makeGroupingSnapshot(
@@ -130,7 +169,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
                 windowRecords: secondWindowRecords
             )
             guard firstGroupingSnapshot == secondGroupingSnapshot else {
-                return .unavailable
+                throw ReadError.unstableSnapshot
             }
             try validateFrontmostApplication(
                 processIdentifier: frontmostPIDAfter,
@@ -140,11 +179,180 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
                 groupingSnapshot: secondGroupingSnapshot
             )
             guard case .enabled = Self.stageManagerEnabledState else {
-                return .unavailable
+                return unavailable(.stageManagerStateUnavailable)
             }
+            cacheStableSidebarGroups(from: secondGroupingSnapshot)
+            fullscreenFallbackSession = nil
+            clearUnavailableReasonIfNeeded()
             return .available(secondGroupingSnapshot)
+        } catch is CancellationError {
+            return unavailable(.cancelled)
+        } catch let error as ReadError {
+            return await fullscreenFallbackAfterNormalFailure(
+                reason: reason(for: error),
+                detail: String(describing: error)
+            )
         } catch {
-            return .unavailable
+            return await fullscreenFallbackAfterNormalFailure(
+                reason: .unexpectedFailure,
+                detail: String(describing: error)
+            )
+        }
+    }
+
+    private func fullscreenFallbackAfterNormalFailure(
+        reason normalFailureReason: UnavailableReason,
+        detail: String
+    ) async -> StageManagerGroupingState {
+        do {
+            guard !CGEventSource.buttonState(
+                .combinedSessionState,
+                button: .left
+            ) else {
+                return unavailable(normalFailureReason, detail: detail)
+            }
+            let frontmostPIDBefore =
+                NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let firstWindowRecords = try readWindowRecords()
+            guard let firstFullscreenContext = try fullscreenContext(
+                for: frontmostPIDBefore,
+                windowRecords: firstWindowRecords
+            ) else {
+                return unavailable(normalFailureReason, detail: detail)
+            }
+
+            try await Task.sleep(nanoseconds: 250_000_000)
+            let secondWindowRecords = try readWindowRecords()
+            let frontmostPIDAfter =
+                NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let secondFullscreenContext = try fullscreenContext(
+                for: frontmostPIDAfter,
+                windowRecords: secondWindowRecords
+            )
+            guard frontmostPIDBefore == frontmostPIDAfter,
+                  firstFullscreenContext == secondFullscreenContext,
+                  !CGEventSource.buttonState(
+                      .combinedSessionState,
+                      button: .left
+                  ) else {
+                return unavailable(.unstableSnapshot)
+            }
+            guard case .enabled = Self.stageManagerEnabledState else {
+                return unavailable(.stageManagerStateUnavailable)
+            }
+            return fullscreenFallbackState(
+                for: firstFullscreenContext,
+                normalFailureReason: normalFailureReason
+            )
+        } catch is CancellationError {
+            return unavailable(.cancelled)
+        } catch let error as ReadError {
+            return unavailable(
+                reason(for: error),
+                detail: String(describing: error)
+            )
+        } catch {
+            return unavailable(
+                .unexpectedFailure,
+                detail: String(describing: error)
+            )
+        }
+    }
+
+    private func fullscreenFallbackState(
+        for context: StageManagerFullscreenContext,
+        normalFailureReason: UnavailableReason
+    ) -> StageManagerGroupingState {
+        if let fullscreenFallbackSession,
+           fullscreenFallbackSession.context == context {
+            clearUnavailableReasonIfNeeded()
+            return .available(fullscreenFallbackSession.snapshot)
+        }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        guard let sidebarCache,
+              let snapshot = StageManagerFullscreenFallbackPolicy.snapshot(
+                  cachedSidebarGroups: sidebarCache.groups,
+                  cacheAge: now - sidebarCache.capturedAt,
+                  fullscreenContext: context
+              ) else {
+            return unavailable(
+                .fullscreenCacheUnavailable,
+                detail: "normal_read=\(normalFailureReason.rawValue)"
+            )
+        }
+
+        fullscreenFallbackSession = FullscreenFallbackSession(
+            context: context,
+            snapshot: snapshot
+        )
+        clearUnavailableReasonIfNeeded()
+        Self.logger.notice(
+            """
+            Using cached Stage Manager sidebar groups while \
+            \(context.bundleIdentifier, privacy: .public) is fullscreen; \
+            normal_read=\(normalFailureReason.rawValue, privacy: .public)
+            """
+        )
+        return .available(snapshot)
+    }
+
+    private func cacheStableSidebarGroups(
+        from snapshot: StageManagerGroupingSnapshot
+    ) {
+        sidebarCache = SidebarCache(
+            groups: snapshot.groups.filter { $0.placement == .sidebar },
+            capturedAt: ProcessInfo.processInfo.systemUptime
+        )
+    }
+
+    private func unavailable(
+        _ reason: UnavailableReason,
+        detail: String? = nil
+    ) -> StageManagerGroupingState {
+        guard lastUnavailableReason != reason else { return .unavailable }
+        lastUnavailableReason = reason
+
+        if reason == .pointerInteraction ||
+            reason == .unstableSnapshot ||
+            reason == .cancelled {
+            Self.logger.debug(
+                "Stage Manager grouping temporarily unavailable: \(reason.rawValue, privacy: .public)"
+            )
+        } else if let detail {
+            Self.logger.warning(
+                "Stage Manager grouping unavailable: \(reason.rawValue, privacy: .public) detail=\(detail, privacy: .public)"
+            )
+        } else {
+            Self.logger.warning(
+                "Stage Manager grouping unavailable: \(reason.rawValue, privacy: .public)"
+            )
+        }
+        return .unavailable
+    }
+
+    private func clearUnavailableReasonIfNeeded() {
+        guard lastUnavailableReason != nil else { return }
+        lastUnavailableReason = nil
+        Self.logger.notice("Stage Manager grouping recovered")
+    }
+
+    private func reason(for error: ReadError) -> UnavailableReason {
+        switch error {
+        case .windowManagerUnavailable:
+            return .windowManagerUnavailable
+        case .accessibilityFailure:
+            return .accessibilityFailure
+        case .malformedAccessibilityTree:
+            return .malformedAccessibilityTree
+        case .windowListUnavailable:
+            return .windowListUnavailable
+        case .unmappedWindow:
+            return .unmappedWindow
+        case .ambiguousDisplay:
+            return .ambiguousDisplay
+        case .unstableSnapshot:
+            return .unstableSnapshot
         }
     }
 
@@ -409,6 +617,37 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
                 isOnscreen: onscreenWindowIDs.contains(windowNumber.uint32Value)
             )
         }
+    }
+
+    private func fullscreenContext(
+        for processIdentifier: pid_t?,
+        windowRecords: [WindowRecord]
+    ) throws -> StageManagerFullscreenContext? {
+        guard let processIdentifier else { return nil }
+        let displayBounds = try activeDisplayBounds()
+
+        // Only use this after the normal Stage Manager read has failed.
+        // CGWindowList is ordered from front to back, and a native fullscreen
+        // presentation matches a display's complete bounds. Requiring a
+        // near-exact frame avoids confusing a normal maximized window with a
+        // fullscreen Space.
+        for record in windowRecords where
+            record.ownerPID == processIdentifier &&
+            isEligibleForegroundWindow(record) {
+            for (displayID, displayFrame) in displayBounds {
+                guard StageManagerFullscreenDetectionPolicy.matchesDisplayBounds(
+                    windowFrame: record.bounds,
+                    displayFrame: displayFrame
+                ) else {
+                    continue
+                }
+                return StageManagerFullscreenContext(
+                    bundleIdentifier: record.bundleIdentifier,
+                    displayID: displayID
+                )
+            }
+        }
+        return nil
     }
 
     private func makeGroupingSnapshot(

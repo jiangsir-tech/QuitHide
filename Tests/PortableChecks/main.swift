@@ -253,6 +253,12 @@ expect(
     "all additional rules are disabled for a new user"
 )
 expect(
+    AutomationDefaults.defaultHideMinutes == 30 &&
+        AutomationDefaults.defaultQuitMinutes == 120 &&
+        AutomationDefaults.preQuitHideMinutes == 30,
+    "new rules use 30-minute hide, 2-hour quit, and 30-minute pre-quit hide defaults"
+)
+expect(
     AutomaticWindowProtectionModePolicy.mode(
         stageManagerGroupProtectionEnabled: true,
         screenVisibilityProtectionEnabled: true,
@@ -557,15 +563,15 @@ expect(
     AutomationPolicy.idleMinutes(
         explicitAction: .unset,
         explicitMinutes: 20,
-        defaultHideMinutes: 5
-    ) == 5,
+        defaultHideMinutes: AutomationDefaults.defaultHideMinutes
+    ) == 30,
     "an inherited default ignores stale per-app timing"
 )
 expect(
     AutomationPolicy.idleMinutes(
         explicitAction: .hide,
         explicitMinutes: 20,
-        defaultHideMinutes: 5
+        defaultHideMinutes: AutomationDefaults.defaultHideMinutes
     ) == 20,
     "an explicit rule keeps its per-app timing"
 )
@@ -667,27 +673,58 @@ expect(
     },
     "all-rules scope includes offline explicit rules"
 )
-let originalTimedRule = StoredAppRule(
+let newHideRule = AppRuleRegistry.updatedRule(
+    existingRule: nil,
     action: .hide,
-    idleMinutes: 120,
+    defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+    defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
     displayName: "Example",
     lastKnownAppPath: nil
 )
-let pinnedTimedRule = AppRuleRegistry.updatedRule(
-    existingRule: originalTimedRule,
-    action: .ignore,
-    defaultIdleMinutes: 5,
+let newQuitRule = AppRuleRegistry.updatedRule(
+    existingRule: nil,
+    action: .quit,
+    defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+    defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
     displayName: "Example",
     lastKnownAppPath: nil
 )
-let restoredTimedRule = AppRuleRegistry.updatedRule(
-    existingRule: pinnedTimedRule,
+let switchedToQuitRule = AppRuleRegistry.updatedRule(
+    existingRule: StoredAppRule(
+        action: .hide,
+        idleMinutes: 7,
+        displayName: "Example",
+        lastKnownAppPath: nil
+    ),
+    action: .quit,
+    defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+    defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
+    displayName: "Example",
+    lastKnownAppPath: nil
+)
+let retainedHideRule = AppRuleRegistry.updatedRule(
+    existingRule: StoredAppRule(
+        action: .hide,
+        idleMinutes: 7,
+        displayName: "Example",
+        lastKnownAppPath: nil
+    ),
     action: .hide,
-    defaultIdleMinutes: 5,
+    defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+    defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
     displayName: "Example",
     lastKnownAppPath: nil
 )
-expect(restoredTimedRule?.idleMinutes == 120, "Ignore preserves the previous automated delay")
+expect(
+    newHideRule?.idleMinutes == 30 &&
+        newQuitRule?.idleMinutes == 120 &&
+        switchedToQuitRule?.idleMinutes == 120,
+    "new and switched automated actions use action-specific defaults"
+)
+expect(
+    retainedHideRule?.idleMinutes == 7,
+    "keeping the same automated action preserves its explicit timing"
+)
 
 let immediateRegistry = StoredRuleRegistry(rules: [
     "com.example.hide": StoredAppRule(action: .hide, idleMinutes: 5, displayName: "Hide", lastKnownAppPath: nil)

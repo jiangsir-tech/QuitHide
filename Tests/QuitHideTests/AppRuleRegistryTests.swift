@@ -230,31 +230,133 @@ struct AppRuleRegistryTests {
         #expect(AppRuleRegistry.decodeRegistry(from: Data("broken".utf8), fallbackIdleMinutes: 20) == .invalid)
     }
 
-    @Test("Ignore preserves the previous automated delay")
-    func ignorePreservesTiming() {
-        let hidden = StoredAppRule(
+    @Test("Loading current explicit rules preserves their saved timing")
+    func explicitRuleTimingIsNotMigrated() throws {
+        let stored = StoredRuleRegistry(rules: [
+            "com.example.hide": StoredAppRule(
+                action: .hide,
+                idleMinutes: 5,
+                displayName: "Hide",
+                lastKnownAppPath: nil
+            ),
+            "com.example.quit": StoredAppRule(
+                action: .quit,
+                idleMinutes: 20,
+                displayName: "Quit",
+                lastKnownAppPath: nil
+            )
+        ])
+        let data = try JSONEncoder().encode(stored)
+
+        guard case let .current(decoded) = AppRuleRegistry.decodeRegistry(
+            from: data,
+            fallbackIdleMinutes: AutomationDefaults.defaultHideMinutes
+        ) else {
+            Issue.record("A current registry should decode without migrating explicit timing")
+            return
+        }
+        #expect(decoded.rules["com.example.hide"]?.idleMinutes == 5)
+        #expect(decoded.rules["com.example.quit"]?.idleMinutes == 20)
+    }
+
+    @Test("Entering an automated action uses that action's default timing")
+    func actionChangesUseTargetDefaults() {
+        let hidden = AppRuleRegistry.updatedRule(
+            existingRule: nil,
             action: .hide,
-            idleMinutes: 120,
-            displayName: "Example",
-            lastKnownAppPath: "/Applications/Example.app"
-        )
-        let pinned = AppRuleRegistry.updatedRule(
-            existingRule: hidden,
-            action: .ignore,
-            defaultIdleMinutes: 5,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
             displayName: "Example",
             lastKnownAppPath: nil
         )
-        let hiddenAgain = AppRuleRegistry.updatedRule(
-            existingRule: pinned,
+        let quitting = AppRuleRegistry.updatedRule(
+            existingRule: nil,
+            action: .quit,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
+            displayName: "Example",
+            lastKnownAppPath: nil
+        )
+        let switchedToQuit = AppRuleRegistry.updatedRule(
+            existingRule: StoredAppRule(
+                action: .hide,
+                idleMinutes: 7,
+                displayName: "Example",
+                lastKnownAppPath: nil
+            ),
+            action: .quit,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
+            displayName: "Example",
+            lastKnownAppPath: nil
+        )
+        let switchedToHide = AppRuleRegistry.updatedRule(
+            existingRule: StoredAppRule(
+                action: .quit,
+                idleMinutes: 240,
+                displayName: "Example",
+                lastKnownAppPath: nil
+            ),
             action: .hide,
-            defaultIdleMinutes: 5,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
+            displayName: "Example",
+            lastKnownAppPath: nil
+        )
+        let restoredFromIgnore = AppRuleRegistry.updatedRule(
+            existingRule: StoredAppRule(
+                action: .ignore,
+                idleMinutes: 7,
+                displayName: "Example",
+                lastKnownAppPath: nil
+            ),
+            action: .hide,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
             displayName: "Example",
             lastKnownAppPath: nil
         )
 
-        #expect(pinned?.idleMinutes == 120)
-        #expect(hiddenAgain?.idleMinutes == 120)
+        #expect(hidden?.idleMinutes == 30)
+        #expect(quitting?.idleMinutes == 120)
+        #expect(switchedToQuit?.idleMinutes == 120)
+        #expect(switchedToHide?.idleMinutes == 30)
+        #expect(restoredFromIgnore?.idleMinutes == 30)
+    }
+
+    @Test("Keeping the same automated action preserves its explicit timing")
+    func sameActionPreservesTiming() {
+        let hidden = StoredAppRule(
+            action: .hide,
+            idleMinutes: 7,
+            displayName: "Example",
+            lastKnownAppPath: "/Applications/Example.app"
+        )
+        let quitting = StoredAppRule(
+            action: .quit,
+            idleMinutes: 240,
+            displayName: "Example",
+            lastKnownAppPath: "/Applications/Example.app"
+        )
+        let hiddenAgain = AppRuleRegistry.updatedRule(
+            existingRule: hidden,
+            action: .hide,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
+            displayName: "Example",
+            lastKnownAppPath: nil
+        )
+        let quittingAgain = AppRuleRegistry.updatedRule(
+            existingRule: quitting,
+            action: .quit,
+            defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+            defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
+            displayName: "Example",
+            lastKnownAppPath: nil
+        )
+
+        #expect(hiddenAgain?.idleMinutes == 7)
+        #expect(quittingAgain?.idleMinutes == 240)
     }
 
     @Test("Catalog keeps offline rules and merges multiple running instances")

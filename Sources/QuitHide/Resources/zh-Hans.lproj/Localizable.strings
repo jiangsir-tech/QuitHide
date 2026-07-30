@@ -133,7 +133,7 @@
 "settings.default_hide.help" = "未单独设置规则的 App 离开前台多久后隐藏";
 "settings.pre_quit_hide.enabled" = "自动退出的 App 退出前先自动隐藏";
 "settings.pre_quit_hide.delay" = "预先隐藏时间";
-"settings.pre_quit_hide.help" = "自动退出的 App 离开前台多久后先隐藏";
+"settings.pre_quit_hide.help" = "从 App 离开前台开始计时；此时间短于该 App 的退出等待时间时先隐藏，退出截止时间不变";
 "settings.stage_manager_protection.enabled" = "台前调度开启时保护分组中的 App";
 "settings.stage_manager_protection.help" = "分组中包含设为“不处理”的 App 时，不自动隐藏或退出组内其他 App；当台前组合内的 App 全部设置为自动规则时，也会在进入侧边栏后才分别开始计时。仅在台前调度开启时生效。辅助功能权限只用于读取分组，不用于移动或重组窗口。";
 "settings.stage_manager_protection.checking" = "正在识别台前调度分组…";

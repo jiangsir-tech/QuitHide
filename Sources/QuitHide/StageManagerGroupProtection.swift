@@ -15,6 +15,63 @@ struct StageManagerGroupingSnapshot: Sendable, Equatable {
     let groups: [StageManagerAppGroup]
 }
 
+struct StageManagerFullscreenContext: Sendable, Equatable {
+    let bundleIdentifier: String
+    let displayID: UInt32
+}
+
+enum StageManagerFullscreenDetectionPolicy {
+    static func matchesDisplayBounds(
+        windowFrame: CGRect,
+        displayFrame: CGRect
+    ) -> Bool {
+        let tolerance: CGFloat = 2
+        let windowFrame = windowFrame.standardized
+        let displayFrame = displayFrame.standardized
+        return abs(windowFrame.minX - displayFrame.minX) <= tolerance &&
+            abs(windowFrame.minY - displayFrame.minY) <= tolerance &&
+            abs(windowFrame.width - displayFrame.width) <= tolerance &&
+            abs(windowFrame.height - displayFrame.height) <= tolerance
+    }
+}
+
+enum StageManagerFullscreenFallbackPolicy {
+    static let maximumInitialCacheAge: TimeInterval = 15
+
+    static func snapshot(
+        cachedSidebarGroups: [StageManagerAppGroup]?,
+        cacheAge: TimeInterval,
+        fullscreenContext: StageManagerFullscreenContext
+    ) -> StageManagerGroupingSnapshot? {
+        guard let cachedSidebarGroups,
+              cacheAge.isFinite,
+              cacheAge >= 0,
+              cacheAge <= maximumInitialCacheAge,
+              !fullscreenContext.bundleIdentifier.isEmpty else {
+            return nil
+        }
+
+        var groups = cachedSidebarGroups.filter {
+            $0.placement == .sidebar
+        }
+        groups.append(StageManagerAppGroup(
+            displayID: fullscreenContext.displayID,
+            placement: .foreground,
+            bundleIdentifiers: [fullscreenContext.bundleIdentifier]
+        ))
+        groups.sort {
+            if $0.displayID != $1.displayID { return $0.displayID < $1.displayID }
+            if $0.placement != $1.placement {
+                return $0.placement == .foreground
+            }
+            return $0.bundleIdentifiers.sorted().lexicographicallyPrecedes(
+                $1.bundleIdentifiers.sorted()
+            )
+        }
+        return StageManagerGroupingSnapshot(groups: groups)
+    }
+}
+
 enum StageManagerGroupingState: Sendable, Equatable {
     case disabled
     case permissionRequired

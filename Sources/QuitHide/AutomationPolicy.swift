@@ -2,7 +2,10 @@ import Foundation
 
 enum AutomationDefaults {
     static let unconfiguredHideEnabled = false
+    static let defaultHideMinutes = 30
+    static let defaultQuitMinutes = 120
     static let preQuitHideEnabled = false
+    static let preQuitHideMinutes = 30
     static let stageManagerGroupProtectionEnabled = false
     static let screenVisibilityProtectionEnabled = false
 }

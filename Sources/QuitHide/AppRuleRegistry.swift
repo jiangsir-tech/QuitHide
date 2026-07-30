@@ -173,17 +173,33 @@ enum AppRuleRegistry {
     static func updatedRule(
         existingRule: StoredAppRule?,
         action: AutoAction,
-        defaultIdleMinutes: Int,
+        defaultHideMinutes: Int,
+        defaultQuitMinutes: Int,
         displayName: String,
         lastKnownAppPath: String?
     ) -> StoredAppRule? {
         guard action != .unset else { return nil }
         let preservedMinutes = existingRule?.idleMinutes.map { max($0, 1) }
+        let targetDefaultMinutes: Int?
+        switch action {
+        case .hide:
+            targetDefaultMinutes = max(defaultHideMinutes, 1)
+        case .quit:
+            targetDefaultMinutes = max(defaultQuitMinutes, 1)
+        case .unset, .ignore:
+            targetDefaultMinutes = nil
+        }
+        let idleMinutes: Int?
+        if action.isAutomated {
+            idleMinutes = existingRule?.action == action
+                ? preservedMinutes ?? targetDefaultMinutes
+                : targetDefaultMinutes
+        } else {
+            idleMinutes = preservedMinutes
+        }
         return StoredAppRule(
             action: action,
-            idleMinutes: action.isAutomated
-                ? preservedMinutes ?? max(defaultIdleMinutes, 1)
-                : preservedMinutes,
+            idleMinutes: idleMinutes,
             displayName: displayName.isEmpty
                 ? existingRule?.displayName ?? "App"
                 : displayName,

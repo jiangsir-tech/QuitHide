@@ -346,12 +346,17 @@ final class AppModel: ObservableObject {
         defaultHideEnabled = defaults.object(forKey: Keys.defaultHideEnabled) as? Bool
             ?? AutomationDefaults.unconfiguredHideEnabled
         defaultHideMinutes = max(
-            defaults.object(forKey: Keys.defaultHideMinutes) as? Int ?? 5,
+            defaults.object(forKey: Keys.defaultHideMinutes) as? Int
+                ?? AutomationDefaults.defaultHideMinutes,
             1
         )
         preQuitHideEnabled = defaults.object(forKey: Keys.preQuitHideEnabled) as? Bool
             ?? AutomationDefaults.preQuitHideEnabled
-        preQuitHideMinutes = max(defaults.object(forKey: Keys.preQuitHideMinutes) as? Int ?? 5, 1)
+        preQuitHideMinutes = max(
+            defaults.object(forKey: Keys.preQuitHideMinutes) as? Int
+                ?? AutomationDefaults.preQuitHideMinutes,
+            1
+        )
         let savedStageManagerGroupProtectionEnabled =
             defaults.object(forKey: Keys.stageManagerGroupProtectionEnabled) as? Bool
             ?? AutomationDefaults.stageManagerGroupProtectionEnabled
@@ -540,7 +545,8 @@ final class AppModel: ObservableObject {
             ruleRegistry.rules[bundleIdentifier] = AppRuleRegistry.updatedRule(
                 existingRule: existingRule,
                 action: action,
-                defaultIdleMinutes: defaultHideMinutes,
+                defaultHideMinutes: AutomationDefaults.defaultHideMinutes,
+                defaultQuitMinutes: AutomationDefaults.defaultQuitMinutes,
                 displayName: catalogItem?.name
                     ?? existingRule?.displayName
                     ?? AppRuleRegistry.fallbackDisplayName(for: bundleIdentifier),
@@ -3218,7 +3224,17 @@ struct AppRow: View {
     }
 
     private var minuteOptions: [Int] {
-        let presets = [2, 5, 10, 20, 60, 120, 300, 1_440]
+        let presets = [
+            2,
+            5,
+            10,
+            20,
+            AutomationDefaults.defaultHideMinutes,
+            60,
+            AutomationDefaults.defaultQuitMinutes,
+            300,
+            1_440
+        ]
         return Array(Set(presets + [model.idleMinutes(for: item.bundleIdentifier)])).sorted()
     }
 
@@ -3447,12 +3463,12 @@ struct SettingsSheet: View {
     }
 
     private var defaultMinuteOptions: [Int] {
-        let presets = [2, 5, 10, 20, 60]
+        let presets = [2, 5, 10, 20, AutomationDefaults.defaultHideMinutes, 60]
         return Array(Set(presets + [model.defaultHideMinutes])).sorted()
     }
 
     private var preQuitHideMinuteOptions: [Int] {
-        let presets = [1, 2, 5, 10, 20, 60]
+        let presets = [1, 2, 5, 10, 20, AutomationDefaults.preQuitHideMinutes, 60]
         return Array(Set(presets + [model.preQuitHideMinutes])).sorted()
     }
 
