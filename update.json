@@ -1,8 +1,8 @@
 {
-  "version": "0.6.7",
-  "build": 21,
+  "version": "0.6.6",
+  "build": 20,
   "minimumSystemVersion": "13.0",
-  "releaseNotes": "修复台前调度开启后使用“显示桌面”时被误报为“窗口保护识别不可用”的问题：QuitHide 现在会在两次稳定观察确认桌面正在显示后，明确显示“正在显示桌面”并暂时暂停自动处理；任何普通 App 窗口仍可见、窗口状态正在变化或判断不可靠时继续保守暂停，避免误隐藏或误退出。同步优化主菜单细节：自动隐藏与自动退出分别显示更精简且符合动作语义的时间选项，并保留用户当前自定义值；搜索框提升静止、悬停和聚焦状态可见度并显示 ⌘F；统一 16pt 水平边距、28pt 范围胶囊和中英文标点，“不处理”项目的时间列留空，“退出 QuitHide”增加悬停强调。设置窗口加宽至 480pt。",
-  "releaseNotesEn": "Fixes the misleading “Window Protection Unavailable” status after Show Desktop is used while Stage Manager is enabled. QuitHide now confirms the desktop state across two stable observations, reports “Showing Desktop,” and temporarily pauses automation. If an ordinary app window remains visible, windows are changing, or the state cannot be determined reliably, automation continues to fail closed to prevent an unintended hide or quit. This release also refines the main menu: Auto Hide and Auto Quit use shorter action-specific duration lists while preserving the current custom value; the search field is clearer at rest, on hover, and when focused, and displays the ⌘F shortcut; 16pt horizontal margins, 28pt scope capsules, and language-appropriate punctuation are applied consistently; Ignore rows leave the duration column empty; and Quit QuitHide gains hover emphasis. The Settings window is widened to 480pt.",
-  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.7"
+  "releaseNotes": "增强台前调度原生全屏场景下的窗口保护：常规分组读取不可用时，QuitHide 仅在确认前台 App 确实全屏且存在刚刚验证过的侧边栏分组时，沿用进入全屏前的分组状态；没有可靠缓存时继续暂停自动处理，避免误隐藏或误退出。同时采用更保守的初始等待时间：新增自动隐藏规则为 30 分钟，新增自动退出规则为 2 小时，未设置规则 App 的默认隐藏时间和“退出前先隐藏”的初始时间均为 30 分钟；切换规则类型时使用目标规则的默认值。附加规则仍默认关闭，已有规则与升级用户已保存的时间不会被重置。",
+  "releaseNotesEn": "Strengthens window protection for native fullscreen apps under Stage Manager. If normal group reading becomes unavailable, QuitHide continues from the last recently verified sidebar-group state only after confirming that the frontmost app truly fills a display; without a reliable cache, automation remains paused to prevent an unintended hide or quit. This release also adopts more conservative initial delays: new Auto Hide rules use 30 minutes, new Auto Quit rules use 2 hours, and both the default hide delay for apps without a rule and the initial pre-quit hide delay use 30 minutes. Changing rule types applies the target rule’s default. The optional rules remain off by default, and existing rules and saved delays are not reset.",
+  "downloadURL": "https://github.com/jiangsir-tech/QuitHide/releases/tag/v0.6.6"
 }
