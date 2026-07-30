@@ -6,6 +6,138 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>QuitHide</title>
         <item>
+            <title>0.6.6</title>
+            <pubDate>Thu, 30 Jul 2026 14:41:47 +0800</pubDate>
+            <sparkle:fullReleaseNotesLink>https://quithide.com/changelog/</sparkle:fullReleaseNotesLink>
+            <sparkle:version>20</sparkle:version>
+            <sparkle:shortVersionString>0.6.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <description><![CDATA[<style>
+.release-history { line-height: 1.55; }
+.release-intro { margin: 0 0 16px; opacity: 0.72; }
+.release-entry { padding: 4px 0 18px; }
+.release-entry + .release-entry { padding-top: 18px; border-top: 1px solid rgba(127, 127, 127, 0.28); }
+.release-entry h2 { margin: 0 0 12px; font-size: 1.28em; }
+.release-entry h3 { margin: 12px 0 5px; font-size: 1em; }
+.release-entry p { margin: 0; }
+.release-entry.sparkle-installed-version,
+.release-entry.sparkle-installed-version ~ .release-entry { display: none; }
+</style>
+<div class="release-history">
+  <p class="release-intro">以下为你当前版本之后包含的更新。<br><span lang="en">These are the updates included after your currently installed version.</span></p>
+
+  <section class="release-entry" data-sparkle-version="20" data-release-version="0.6.6">
+    <h2>QuitHide 0.6.6</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>增强台前调度原生全屏场景下的窗口保护：常规分组读取不可用时，QuitHide 仅在确认前台 App 确实全屏且存在刚刚验证过的侧边栏分组时，沿用进入全屏前的分组状态；没有可靠缓存时继续暂停自动处理，避免误隐藏或误退出。同时采用更保守的初始等待时间：新增自动隐藏规则为 30 分钟，新增自动退出规则为 2 小时，未设置规则 App 的默认隐藏时间和“退出前先隐藏”的初始时间均为 30 分钟；切换规则类型时使用目标规则的默认值。附加规则仍默认关闭，已有规则与升级用户已保存的时间不会被重置。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Strengthens window protection for native fullscreen apps under Stage Manager. If normal group reading becomes unavailable, QuitHide continues from the last recently verified sidebar-group state only after confirming that the frontmost app truly fills a display; without a reliable cache, automation remains paused to prevent an unintended hide or quit. This release also adopts more conservative initial delays: new Auto Hide rules use 30 minutes, new Auto Quit rules use 2 hours, and both the default hide delay for apps without a rule and the initial pre-quit hide delay use 30 minutes. Changing rule types applies the target rule’s default. The optional rules remain off by default, and existing rules and saved delays are not reset.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="19" data-release-version="0.6.5">
+    <h2>QuitHide 0.6.5</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>优化窗口保护状态：台前调度开启时，桌面前台运行的 App 统一显示绿色“使用中”，只有与“不处理”App 组成的侧边栏分组显示“台前调度分组保护中”；台前调度关闭时，屏幕可见的 App 也显示绿色“使用中”。同时提高强制退出确认按钮的文字对比度，并将主菜单由 410pt 加宽至 440pt、搜索框由 174pt 加宽至 190pt，减少拥挤感。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Refines window-protection statuses: with Stage Manager enabled, apps running in the foreground show green “In Use,” while only sidebar groups anchored by an Ignore app show “Protected by Stage Manager Group.” With Stage Manager disabled, visible apps also show green “In Use.” This release also improves the Force Quit confirmation button’s text contrast and widens the main menu from 410 pt to 440 pt and the search field from 174 pt to 190 pt to reduce crowding.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="18" data-release-version="0.6.4">
+    <h2>QuitHide 0.6.4</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>修复部分 App（尤其是微信）实际已经隐藏后，状态仍长期停留在“正在隐藏”的问题。现在只有真实隐藏操作执行期间才显示处理中；隐藏完成状态不会再被不稳定的系统隐藏标记覆盖，也不会在下一个计时周期重复触发，App 重新显示或激活后仍会正常重新计时。同时将设置窗口由 410pt 小幅加宽至 440pt，减少中英文说明文字换行。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Fixes an issue where some apps, especially WeChat, could remain stuck on “Hiding…” long after they were already hidden. Progress is now shown only while a real hide operation is running; confirmed completion survives unstable system hidden-state flags and prevents the next timer interval from hiding the app again, while normal timing still resumes after the app is shown or activated. The Settings window is also widened slightly from 410 pt to 440 pt to reduce wrapping in Chinese and English descriptions.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="17" data-release-version="0.6.3">
+    <h2>QuitHide 0.6.3</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>修复 v0.6.2 安装盘在已有同名 QuitHide 磁盘映像挂载时可能丢失拖拽安装提示的问题。发布构建现在会阻止同名卷冲突，并在打包和公证后验证 Finder 布局、背景图与 Applications 链接，避免不完整安装盘再次发布。App 功能未发生变化。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Fixes an issue where the v0.6.2 disk image could lose its drag-to-Applications guidance when another QuitHide disk image with the same volume name was already mounted. Release builds now block same-name volume conflicts and verify the Finder layout, background, and Applications link after packaging and notarization. App functionality is unchanged.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="16" data-release-version="0.6.2">
+    <h2>QuitHide 0.6.2</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>优化窗口保护在窗口快速变化或系统唤醒时的状态反馈：短暂读取失败会先等待窗口稳定，只有连续失败才提示保护不可用；保护中的 App 状态改为绿色，设置页新增随语言跳转的 QuitHide 官网入口。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Improves window-protection feedback while windows are changing or the Mac is waking: transient read failures now wait for the window state to settle, and protection is reported unavailable only after consecutive failures. Protected app statuses are now shown in green, and Settings adds a language-aware link to the QuitHide website.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="15" data-release-version="0.6.1">
+    <h2>QuitHide 0.6.1</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>恢复菜单窗口使用 macOS 系统默认背景透明效果，取消额外叠加的半透明背景。优化应用内更新说明：跨越多个版本升级时会累计显示当前版本之后的全部更新，并新增中英文完整更新历史页面；发布流程同时保留历史 appcast 项并校验更新记录连续性。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Restores the menu window&#039;s default macOS background translucency by removing the additional translucent overlay. Improves in-app release notes so upgrades spanning multiple versions show every change after the installed build, adds bilingual changelog pages, and strengthens appcast history retention and release continuity checks.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="14" data-release-version="0.6.0">
+    <h2>QuitHide 0.6.0</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>新增两套可选窗口保护：台前调度开启时，含“不处理”App 的分组会保护其他成员，全部为自动规则的前台组合也会在移入侧边栏后才分别开始计时；台前调度关闭时，屏幕上仍可见的自动规则 App 不会被处理，只有窗口完全被其他 App 遮住后才从零计时。分组保护仅在开启时请求辅助功能权限；屏幕可见保护无需额外权限且不读取屏幕内容。另优化规则选择器的文字对齐并保留彩色状态图标。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Adds two optional window-protection modes. With Stage Manager on, a group containing an Ignore app protects its other members, while an all-automatic foreground group starts separate timers only after moving to the sidebar. With Stage Manager off, automatic-rule apps remain protected while any window is visible and restart timing only after all windows are fully covered. Group protection requests Accessibility only when enabled; visible-window protection needs no extra permission and never reads screen contents. Also aligns rule-picker labels while preserving their status colors.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="13" data-release-version="0.5.1">
+    <h2>QuitHide 0.5.1</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>修复部分 Mac 因 macOS 无法读取登录项状态而无法开启“登录时启动”的问题；QuitHide 现在会在从磁盘映像、“下载”文件夹或其他非“应用程序”位置运行时主动提醒移动并重新打开，并为 DMG 增加清晰的拖拽安装指引。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Fixes an issue that prevented Launch at Login from being enabled when macOS could not read the login item status. QuitHide now prompts users to move and reopen the app when it is running from a disk image, Downloads, or another location outside Applications, and the DMG now provides clear drag-to-Applications instructions.</p>
+    </div>
+  </section>
+
+  <section class="release-entry" data-sparkle-version="12" data-release-version="0.5.0">
+    <h2>QuitHide 0.5.0</h2>
+    <div lang="zh-CN">
+      <h3>简体中文</h3>
+      <p>接入 Sparkle 应用内安全更新：更新包与更新清单均经过 Ed25519 签名验证，后续版本优先通过 EdgeOne 与香港 COS 检查和下载，同时保留 GitHub Release 作为海外镜像与手动下载入口。</p>
+    </div>
+    <div lang="en">
+      <h3>English</h3>
+      <p>Adds secure in-app updates with Sparkle. Update archives and the update feed are verified with Ed25519 signatures; future releases prefer EdgeOne and Hong Kong COS while retaining GitHub Releases as an overseas mirror and manual download option.</p>
+    </div>
+  </section>
+</div>
+]]></description>
+            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.6/QuitHide-v0.6.6-universal.dmg" length="4041362" type="application/octet-stream" sparkle:edSignature="rItNdsWtsgzD/Inyj1faaNzAZzTWAx12bVrW7a5iT2N+PELEyR/5Ja+2TCH7tuRTGXOyQzQPLVTVneN9PawqAQ=="/>
+        </item>
+        <item>
             <title>0.6.5</title>
             <pubDate>Wed, 29 Jul 2026 16:33:22 +0800</pubDate>
             <sparkle:fullReleaseNotesLink>https://quithide.com/changelog/</sparkle:fullReleaseNotesLink>
@@ -413,81 +545,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 ]]></description>
             <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.2/QuitHide-v0.6.2-universal.dmg" length="3949112" type="application/octet-stream" sparkle:edSignature="UhQnO1YuczChp3+aWlh6K5YKudkCrY9xRMf5HqJ+a0f2wPTRQdd450+vEIlLpzxNBAYDh/N1Cc2Tsm4mznPfDA=="/>
         </item>
-        <item>
-            <title>0.6.1</title>
-            <pubDate>Tue, 28 Jul 2026 02:11:31 +0800</pubDate>
-            <sparkle:fullReleaseNotesLink>https://quithide.com/changelog/</sparkle:fullReleaseNotesLink>
-            <sparkle:version>15</sparkle:version>
-            <sparkle:shortVersionString>0.6.1</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[<style>
-.release-history { line-height: 1.55; }
-.release-intro { margin: 0 0 16px; opacity: 0.72; }
-.release-entry { padding: 4px 0 18px; }
-.release-entry + .release-entry { padding-top: 18px; border-top: 1px solid rgba(127, 127, 127, 0.28); }
-.release-entry h2 { margin: 0 0 12px; font-size: 1.28em; }
-.release-entry h3 { margin: 12px 0 5px; font-size: 1em; }
-.release-entry p { margin: 0; }
-.release-entry.sparkle-installed-version,
-.release-entry.sparkle-installed-version ~ .release-entry { display: none; }
-</style>
-<div class="release-history">
-  <p class="release-intro">以下为你当前版本之后包含的更新。<br><span lang="en">These are the updates included after your currently installed version.</span></p>
-
-  <section class="release-entry" data-sparkle-version="15" data-release-version="0.6.1">
-    <h2>QuitHide 0.6.1</h2>
-    <div lang="zh-CN">
-      <h3>简体中文</h3>
-      <p>恢复菜单窗口使用 macOS 系统默认背景透明效果，取消额外叠加的半透明背景。优化应用内更新说明：跨越多个版本升级时会累计显示当前版本之后的全部更新，并新增中英文完整更新历史页面；发布流程同时保留历史 appcast 项并校验更新记录连续性。</p>
-    </div>
-    <div lang="en">
-      <h3>English</h3>
-      <p>Restores the menu window&#039;s default macOS background translucency by removing the additional translucent overlay. Improves in-app release notes so upgrades spanning multiple versions show every change after the installed build, adds bilingual changelog pages, and strengthens appcast history retention and release continuity checks.</p>
-    </div>
-  </section>
-
-  <section class="release-entry" data-sparkle-version="14" data-release-version="0.6.0">
-    <h2>QuitHide 0.6.0</h2>
-    <div lang="zh-CN">
-      <h3>简体中文</h3>
-      <p>新增两套可选窗口保护：台前调度开启时，含“不处理”App 的分组会保护其他成员，全部为自动规则的前台组合也会在移入侧边栏后才分别开始计时；台前调度关闭时，屏幕上仍可见的自动规则 App 不会被处理，只有窗口完全被其他 App 遮住后才从零计时。分组保护仅在开启时请求辅助功能权限；屏幕可见保护无需额外权限且不读取屏幕内容。另优化规则选择器的文字对齐并保留彩色状态图标。</p>
-    </div>
-    <div lang="en">
-      <h3>English</h3>
-      <p>Adds two optional window-protection modes. With Stage Manager on, a group containing an Ignore app protects its other members, while an all-automatic foreground group starts separate timers only after moving to the sidebar. With Stage Manager off, automatic-rule apps remain protected while any window is visible and restart timing only after all windows are fully covered. Group protection requests Accessibility only when enabled; visible-window protection needs no extra permission and never reads screen contents. Also aligns rule-picker labels while preserving their status colors.</p>
-    </div>
-  </section>
-
-  <section class="release-entry" data-sparkle-version="13" data-release-version="0.5.1">
-    <h2>QuitHide 0.5.1</h2>
-    <div lang="zh-CN">
-      <h3>简体中文</h3>
-      <p>修复部分 Mac 因 macOS 无法读取登录项状态而无法开启“登录时启动”的问题；QuitHide 现在会在从磁盘映像、“下载”文件夹或其他非“应用程序”位置运行时主动提醒移动并重新打开，并为 DMG 增加清晰的拖拽安装指引。</p>
-    </div>
-    <div lang="en">
-      <h3>English</h3>
-      <p>Fixes an issue that prevented Launch at Login from being enabled when macOS could not read the login item status. QuitHide now prompts users to move and reopen the app when it is running from a disk image, Downloads, or another location outside Applications, and the DMG now provides clear drag-to-Applications instructions.</p>
-    </div>
-  </section>
-
-  <section class="release-entry" data-sparkle-version="12" data-release-version="0.5.0">
-    <h2>QuitHide 0.5.0</h2>
-    <div lang="zh-CN">
-      <h3>简体中文</h3>
-      <p>接入 Sparkle 应用内安全更新：更新包与更新清单均经过 Ed25519 签名验证，后续版本优先通过 EdgeOne 与香港 COS 检查和下载，同时保留 GitHub Release 作为海外镜像与手动下载入口。</p>
-    </div>
-    <div lang="en">
-      <h3>English</h3>
-      <p>Adds secure in-app updates with Sparkle. Update archives and the update feed are verified with Ed25519 signatures; future releases prefer EdgeOne and Hong Kong COS while retaining GitHub Releases as an overseas mirror and manual download option.</p>
-    </div>
-  </section>
-</div>
-]]></description>
-            <enclosure url="https://quithide-downloads-1313533016.cos.ap-hongkong.myqcloud.com/releases/v0.6.1/QuitHide-v0.6.1-universal.dmg" length="3945139" type="application/octet-stream" sparkle:edSignature="GDVQssQHzbeD0Wdk/Zfq0rH5LRpLlMyOeT+fPMbr27xElnU20WshEIS5+OQTmQSg6z+T/o3wgXGXx+Ulh4ZIDQ=="/>
-        </item>
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: h735PxG5QX4RwWWhl71vRnld1VNATm4bXaAod5W9ku6YatBXmENk6+kk7MhtinbFzkcMB5gJcB2V6w/eV02aDw==
-length: 37814
+edSignature: 9Egys+Ar2pz0NZlUQChOOpZxxnMz2PSVIW0QyriQGXCXcMIW4ZnvlwqmWuscLbVYU/V1Fbh4I2zBftqD1n8jDw==
+length: 43720
 -->

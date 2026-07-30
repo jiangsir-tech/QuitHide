@@ -85,7 +85,7 @@
       "version": "0.6.6",
       "build": 20,
       "minimumSystemVersion": "13.0",
-      "publishedAt": "2026-07-30T06:27:19Z",
+      "publishedAt": "2026-07-30T06:43:55Z",
       "releaseNotes": {
         "zh-CN": "增强台前调度原生全屏场景下的窗口保护：常规分组读取不可用时，QuitHide 仅在确认前台 App 确实全屏且存在刚刚验证过的侧边栏分组时，沿用进入全屏前的分组状态；没有可靠缓存时继续暂停自动处理，避免误隐藏或误退出。同时采用更保守的初始等待时间：新增自动隐藏规则为 30 分钟，新增自动退出规则为 2 小时，未设置规则 App 的默认隐藏时间和“退出前先隐藏”的初始时间均为 30 分钟；切换规则类型时使用目标规则的默认值。附加规则仍默认关闭，已有规则与升级用户已保存的时间不会被重置。",
         "en": "Strengthens window protection for native fullscreen apps under Stage Manager. If normal group reading becomes unavailable, QuitHide continues from the last recently verified sidebar-group state only after confirming that the frontmost app truly fills a display; without a reliable cache, automation remains paused to prevent an unintended hide or quit. This release also adopts more conservative initial delays: new Auto Hide rules use 30 minutes, new Auto Quit rules use 2 hours, and both the default hide delay for apps without a rule and the initial pre-quit hide delay use 30 minutes. Changing rule types applies the target rule’s default. The optional rules remain off by default, and existing rules and saved delays are not reset."
