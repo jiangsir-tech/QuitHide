@@ -51,7 +51,7 @@
 "menu.section.automatic_hide" = "自动隐藏";
 "menu.section.automatic_quit" = "自动退出";
 "menu.section.search_results" = "搜索结果";
-"menu.section.count" = "{section} ({count})";
+"menu.section.count" = "{section}（{count}）";
 "menu.section.running_count" = "· 运行中 {count}";
 "menu.update.available" = "发现新版本 {version}";
 "menu.update.download" = "前往下载";
@@ -103,6 +103,7 @@
 "status.in_use" = "使用中";
 "status.stage_manager.group_protected" = "台前调度分组保护中";
 "status.stage_manager.unavailable_paused" = "分组识别不可用 · 自动处理已暂停";
+"status.stage_manager.showing_desktop" = "正在显示桌面";
 "status.window_protection.waiting_for_stability" = "窗口正在变化 · 自动处理暂时暂停";
 "status.window_protection.unavailable_paused" = "窗口保护识别不可用 · 自动处理已暂停";
 "status.waiting_for_background" = "等待离开前台";
@@ -143,6 +144,7 @@
 "settings.stage_manager_protection.active_count" = "已生效 · 正在保护 {count} 个自动规则 App";
 "settings.stage_manager_protection.permission_required" = "需要辅助功能权限；获得权限前，台前调度开启时自动处理会暂停";
 "settings.stage_manager_protection.unavailable" = "暂时无法可靠识别分组，自动处理已暂停";
+"settings.stage_manager_protection.showing_desktop" = "正在显示桌面，自动处理暂时暂停";
 "settings.stage_manager_protection.grant_permission" = "授予辅助功能权限…";
 "settings.screen_visibility_protection.enabled" = "台前调度关闭时保护屏幕可见 App";
 "settings.screen_visibility_protection.help" = "仅在台前调度关闭时生效。设置了自动规则但屏幕上可见的 App 不会被自动隐藏或退出；窗口完全被其他应用遮住后，才从零开始计时。无须额外权限，也不读取屏幕内容；遮挡按窗口外框计算。";

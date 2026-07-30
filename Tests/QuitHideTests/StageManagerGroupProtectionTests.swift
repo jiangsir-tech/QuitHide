@@ -34,6 +34,10 @@ struct StageManagerGroupProtectionTests {
         ) == .legacy)
         #expect(evaluate(
             featureEnabled: false,
+            state: .showingDesktop
+        ) == .legacy)
+        #expect(evaluate(
+            featureEnabled: false,
             state: .unavailable
         ) == .legacy)
     }
@@ -43,6 +47,9 @@ struct StageManagerGroupProtectionTests {
         #expect(evaluate(
             state: .permissionRequired
         ) == .unavailable(.permissionRequired))
+        #expect(evaluate(
+            state: .showingDesktop
+        ) == .unavailable(.showingDesktop))
         #expect(evaluate(
             state: .unavailable
         ) == .unavailable(.snapshotUnavailable))
@@ -353,6 +360,9 @@ struct StageManagerProtectionRuntimePolicyTests {
         ))
         #expect(StageManagerRuntimeAvailabilityPolicy.isUnavailable(
             for: .unavailable(.permissionRequired)
+        ))
+        #expect(StageManagerRuntimeAvailabilityPolicy.isUnavailable(
+            for: .unavailable(.showingDesktop)
         ))
     }
 

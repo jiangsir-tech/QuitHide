@@ -87,6 +87,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
     private enum ReadError: Error {
         case windowManagerUnavailable
         case accessibilityFailure(AXError)
+        case stageManagerSpacesUnavailable
         case malformedAccessibilityTree
         case windowListUnavailable
         case unmappedWindow
@@ -100,6 +101,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
         case unstableSnapshot = "unstable_snapshot"
         case windowManagerUnavailable = "window_manager_unavailable"
         case accessibilityFailure = "accessibility_failure"
+        case stageManagerSpacesUnavailable = "stage_manager_spaces_unavailable"
         case malformedAccessibilityTree = "malformed_accessibility_tree"
         case windowListUnavailable = "window_list_unavailable"
         case unmappedWindow = "unmapped_window"
@@ -107,6 +109,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
         case fullscreenCacheUnavailable = "fullscreen_cache_unavailable"
         case cancelled = "cancelled"
         case unexpectedFailure = "unexpected_failure"
+        case showingDesktop = "showing_desktop"
     }
 
     private var sidebarCache: SidebarCache?
@@ -211,26 +214,49 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
             ) else {
                 return unavailable(normalFailureReason, detail: detail)
             }
+            let firstFrontmostApplication =
+                NSWorkspace.shared.frontmostApplication
             let frontmostPIDBefore =
-                NSWorkspace.shared.frontmostApplication?.processIdentifier
+                firstFrontmostApplication?.processIdentifier
             let firstWindowRecords = try readWindowRecords()
-            guard let firstFullscreenContext = try fullscreenContext(
+            let firstShowDesktopObservation = try showDesktopObservation(
+                frontmostApplication: firstFrontmostApplication,
+                windowRecords: firstWindowRecords
+            )
+            let firstFullscreenContext = try fullscreenContext(
                 for: frontmostPIDBefore,
                 windowRecords: firstWindowRecords
-            ) else {
+            )
+            // WindowManager can expose no sm.space elements, a partially
+            // malformed subtree, or sidebar window IDs that temporarily no
+            // longer map while Show Desktop is active. None of these errors
+            // is sufficient on its own; the policy below also requires two
+            // stable observations with no ordinary workspace window before
+            // presenting the normal desktop state.
+            let normalReadHasShowDesktopCompatibleStructureError =
+                normalFailureReason == .stageManagerSpacesUnavailable ||
+                normalFailureReason == .malformedAccessibilityTree ||
+                normalFailureReason == .unmappedWindow
+            guard normalReadHasShowDesktopCompatibleStructureError ||
+                    firstFullscreenContext != nil else {
                 return unavailable(normalFailureReason, detail: detail)
             }
 
             try await Task.sleep(nanoseconds: 250_000_000)
             let secondWindowRecords = try readWindowRecords()
+            let secondFrontmostApplication =
+                NSWorkspace.shared.frontmostApplication
             let frontmostPIDAfter =
-                NSWorkspace.shared.frontmostApplication?.processIdentifier
+                secondFrontmostApplication?.processIdentifier
+            let secondShowDesktopObservation = try showDesktopObservation(
+                frontmostApplication: secondFrontmostApplication,
+                windowRecords: secondWindowRecords
+            )
             let secondFullscreenContext = try fullscreenContext(
                 for: frontmostPIDAfter,
                 windowRecords: secondWindowRecords
             )
             guard frontmostPIDBefore == frontmostPIDAfter,
-                  firstFullscreenContext == secondFullscreenContext,
                   !CGEventSource.buttonState(
                       .combinedSessionState,
                       button: .left
@@ -239,6 +265,26 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
             }
             guard case .enabled = Self.stageManagerEnabledState else {
                 return unavailable(.stageManagerStateUnavailable)
+            }
+            if StageManagerShowDesktopDetectionPolicy.isShowingDesktop(
+                normalReadFailedWithCompatibleStructureError:
+                    normalReadHasShowDesktopCompatibleStructureError,
+                stageManagerIsEnabled: true,
+                isPointerInteractionInProgress: false,
+                firstObservation: firstShowDesktopObservation,
+                secondObservation: secondShowDesktopObservation
+            ) {
+                return showingDesktop()
+            }
+            if normalReadHasShowDesktopCompatibleStructureError,
+               firstShowDesktopObservation != secondShowDesktopObservation {
+                return unavailable(.unstableSnapshot)
+            }
+            guard firstFullscreenContext == secondFullscreenContext else {
+                return unavailable(.unstableSnapshot)
+            }
+            guard let firstFullscreenContext else {
+                return unavailable(normalFailureReason, detail: detail)
             }
             return fullscreenFallbackState(
                 for: firstFullscreenContext,
@@ -297,6 +343,55 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
         return .available(snapshot)
     }
 
+    private func showDesktopObservation(
+        frontmostApplication: NSRunningApplication?,
+        windowRecords: [WindowRecord]
+    ) throws -> StageManagerShowDesktopObservation {
+        let displayBounds = try activeDisplayBounds()
+        return StageManagerShowDesktopObservation(
+            frontmostProcessIdentifier:
+                frontmostApplication?.processIdentifier,
+            frontmostBundleIdentifier:
+                frontmostApplication?.bundleIdentifier,
+            hasOrdinaryOnscreenApplicationWindow:
+                windowRecords.contains {
+                    isOrdinaryWorkspaceWindow(
+                        $0,
+                        displayBounds: displayBounds
+                    )
+                }
+        )
+    }
+
+    private func isOrdinaryWorkspaceWindow(
+        _ record: WindowRecord,
+        displayBounds: [UInt32: CGRect]
+    ) -> Bool {
+        guard record.isOnscreen,
+              record.layer == 0,
+              record.alpha > 0,
+              record.bounds.width > 0,
+              record.bounds.height > 0 else {
+            return false
+        }
+        return StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+            windowFrame: record.bounds,
+            displayFrames: Array(displayBounds.values)
+        )
+    }
+
+    private func showingDesktop() -> StageManagerGroupingState {
+        fullscreenFallbackSession = nil
+        guard lastUnavailableReason != .showingDesktop else {
+            return .showingDesktop
+        }
+        lastUnavailableReason = .showingDesktop
+        Self.logger.debug(
+            "Stage Manager grouping paused while the desktop is showing"
+        )
+        return .showingDesktop
+    }
+
     private func cacheStableSidebarGroups(
         from snapshot: StageManagerGroupingSnapshot
     ) {
@@ -343,6 +438,8 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
             return .windowManagerUnavailable
         case .accessibilityFailure:
             return .accessibilityFailure
+        case .stageManagerSpacesUnavailable:
+            return .stageManagerSpacesUnavailable
         case .malformedAccessibilityTree:
             return .malformedAccessibilityTree
         case .windowListUnavailable:
@@ -389,7 +486,7 @@ actor SystemStageManagerGroupingProvider: StageManagerGroupingProviding {
             maximumDepth: 4
         )
         guard !spaces.isEmpty else {
-            throw ReadError.malformedAccessibilityTree
+            throw ReadError.stageManagerSpacesUnavailable
         }
 
         let snapshots = try spaces.map { space -> AXSpaceSnapshot in

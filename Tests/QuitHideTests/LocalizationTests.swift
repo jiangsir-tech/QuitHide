@@ -157,6 +157,30 @@ struct LocalizationResourceTests {
         #expect(chinese.text(.statusInUse) == "使用中")
         #expect(english.text(.statusInUse) == "In Use")
         #expect(
+            chinese.text(.statusStageManagerShowingDesktop) ==
+                "正在显示桌面"
+        )
+        #expect(
+            english.text(.statusStageManagerShowingDesktop) ==
+                "Showing Desktop"
+        )
+        #expect(
+            chinese.text(.settingsStageManagerProtectionShowingDesktop) ==
+                "正在显示桌面，自动处理暂时暂停"
+        )
+        #expect(
+            english.text(.settingsStageManagerProtectionShowingDesktop) ==
+                "Showing Desktop; automation is temporarily paused"
+        )
+        #expect(chinese.text(
+            .menuSectionCount,
+            replacements: ["section": "不处理", "count": "3"]
+        ) == "不处理（3）")
+        #expect(english.text(
+            .menuSectionCount,
+            replacements: ["section": "Ignore", "count": "3"]
+        ) == "Ignore (3)")
+        #expect(
             chinese.text(.statusStageManagerGroupProtected) ==
                 "台前调度分组保护中"
         )

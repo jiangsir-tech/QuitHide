@@ -53,6 +53,23 @@ enum AutoAction: String, CaseIterable, Codable {
 }
 
 enum AutomationPolicy {
+    static func durationOptions(
+        for action: AutoAction,
+        currentMinutes: Int
+    ) -> [Int] {
+        let presets: [Int]
+        switch action {
+        case .hide:
+            presets = [5, 10, AutomationDefaults.defaultHideMinutes, 60]
+        case .quit:
+            presets = [30, 60, AutomationDefaults.defaultQuitMinutes, 300, 1_440]
+        case .unset, .ignore:
+            return []
+        }
+
+        return Array(Set(presets + [max(currentMinutes, 1)])).sorted()
+    }
+
     static func effectiveAction(
         explicitAction: AutoAction,
         defaultHideEnabled: Bool

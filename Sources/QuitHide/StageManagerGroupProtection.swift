@@ -72,9 +72,82 @@ enum StageManagerFullscreenFallbackPolicy {
     }
 }
 
+struct StageManagerShowDesktopObservation: Sendable, Equatable {
+    let frontmostProcessIdentifier: Int32?
+    let frontmostBundleIdentifier: String?
+    let hasOrdinaryOnscreenApplicationWindow: Bool
+}
+
+enum StageManagerShowDesktopWindowPolicy {
+    static func isOrdinaryWorkspaceWindow(
+        windowFrame: CGRect,
+        displayFrames: [CGRect]
+    ) -> Bool {
+        let windowFrame = windowFrame.standardized
+        let intersectsActiveDisplay = displayFrames.contains {
+            displayFrame in
+            let visibleFrame = windowFrame.intersection(
+                displayFrame.standardized
+            )
+            return !visibleFrame.isNull && !visibleFrame.isEmpty
+        }
+        guard intersectsActiveDisplay else { return false }
+        return !isSidebarThumbnail(
+            windowFrame: windowFrame,
+            displayFrames: displayFrames
+        )
+    }
+
+    static func isSidebarThumbnail(
+        windowFrame: CGRect,
+        displayFrames: [CGRect]
+    ) -> Bool {
+        let windowFrame = windowFrame.standardized
+        return displayFrames.contains { displayFrame in
+            let displayFrame = displayFrame.standardized
+            let visibleFrame = windowFrame.intersection(displayFrame)
+            guard !visibleFrame.isNull,
+                  !visibleFrame.isEmpty else {
+                return false
+            }
+            let sidebarWidth = min(
+                max(displayFrame.width * 0.15, 180),
+                240
+            )
+            let isAtHorizontalEdge =
+                visibleFrame.maxX <= displayFrame.minX + sidebarWidth ||
+                visibleFrame.minX >= displayFrame.maxX - sidebarWidth
+            return isAtHorizontalEdge &&
+                windowFrame.width <= sidebarWidth &&
+                windowFrame.height <= 260
+        }
+    }
+}
+
+enum StageManagerShowDesktopDetectionPolicy {
+    static func isShowingDesktop(
+        normalReadFailedWithCompatibleStructureError: Bool,
+        stageManagerIsEnabled: Bool,
+        isPointerInteractionInProgress: Bool,
+        firstObservation: StageManagerShowDesktopObservation,
+        secondObservation: StageManagerShowDesktopObservation
+    ) -> Bool {
+        guard normalReadFailedWithCompatibleStructureError,
+              stageManagerIsEnabled,
+              !isPointerInteractionInProgress,
+              firstObservation == secondObservation,
+              firstObservation.frontmostProcessIdentifier != nil,
+              !firstObservation.hasOrdinaryOnscreenApplicationWindow else {
+            return false
+        }
+        return true
+    }
+}
+
 enum StageManagerGroupingState: Sendable, Equatable {
     case disabled
     case permissionRequired
+    case showingDesktop
     case available(StageManagerGroupingSnapshot)
     case unavailable
 }
@@ -86,6 +159,7 @@ enum StageManagerHoldReason: Sendable, Hashable {
 
 enum StageManagerProtectionUnavailableReason: Sendable, Equatable {
     case permissionRequired
+    case showingDesktop
     case snapshotUnavailable
 }
 
@@ -115,6 +189,8 @@ enum StageManagerGroupProtectionPolicy {
             return .legacy
         case .permissionRequired:
             return .unavailable(.permissionRequired)
+        case .showingDesktop:
+            return .unavailable(.showingDesktop)
         case .unavailable:
             return .unavailable(.snapshotUnavailable)
         case let .available(snapshot):

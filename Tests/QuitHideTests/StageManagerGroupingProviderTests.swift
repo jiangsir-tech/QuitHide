@@ -47,6 +47,195 @@ struct StageManagerGroupingProviderTests {
     }
 }
 
+@Suite("Show Desktop detection policy")
+struct StageManagerShowDesktopDetectionPolicyTests {
+    private let desktopObservation = StageManagerShowDesktopObservation(
+        frontmostProcessIdentifier: 42,
+        frontmostBundleIdentifier: "com.example.frontmost",
+        hasOrdinaryOnscreenApplicationWindow: false
+    )
+
+    @Test("Stable structural failure without an ordinary workspace window is detected")
+    func detectsStableShowDesktopState() {
+        #expect(isShowingDesktop(
+            first: desktopObservation,
+            second: desktopObservation
+        ))
+    }
+
+    @Test("A non-structural accessibility failure is never relabeled")
+    func requiresACompatibleStructureFailure() {
+        #expect(!isShowingDesktop(
+            compatibleStructureFailure: false,
+            first: desktopObservation,
+            second: desktopObservation
+        ))
+    }
+
+    @Test("An ordinary visible application window is rejected")
+    func requiresNoOrdinaryVisibleApplicationWindow() {
+        #expect(!isShowingDesktop(
+            first: StageManagerShowDesktopObservation(
+                frontmostProcessIdentifier: 42,
+                frontmostBundleIdentifier: "com.example.frontmost",
+                hasOrdinaryOnscreenApplicationWindow: true
+            ),
+            second: StageManagerShowDesktopObservation(
+                frontmostProcessIdentifier: 42,
+                frontmostBundleIdentifier: "com.example.frontmost",
+                hasOrdinaryOnscreenApplicationWindow: true
+            )
+        ))
+    }
+
+    @Test("Changing observations, pointer interaction, and Stage Manager off are rejected")
+    func requiresStableIdleStageManagerObservations() {
+        #expect(!isShowingDesktop(
+            first: desktopObservation,
+            second: StageManagerShowDesktopObservation(
+                frontmostProcessIdentifier: 43,
+                frontmostBundleIdentifier: "com.example.frontmost",
+                hasOrdinaryOnscreenApplicationWindow: false
+            )
+        ))
+        #expect(!isShowingDesktop(
+            pointerInteraction: true,
+            first: desktopObservation,
+            second: desktopObservation
+        ))
+        #expect(!isShowingDesktop(
+            stageManagerEnabled: false,
+            first: desktopObservation,
+            second: desktopObservation
+        ))
+    }
+
+    private func isShowingDesktop(
+        compatibleStructureFailure: Bool = true,
+        stageManagerEnabled: Bool = true,
+        pointerInteraction: Bool = false,
+        first: StageManagerShowDesktopObservation,
+        second: StageManagerShowDesktopObservation
+    ) -> Bool {
+        StageManagerShowDesktopDetectionPolicy.isShowingDesktop(
+            normalReadFailedWithCompatibleStructureError:
+                compatibleStructureFailure,
+            stageManagerIsEnabled: stageManagerEnabled,
+            isPointerInteractionInProgress: pointerInteraction,
+            firstObservation: first,
+            secondObservation: second
+        )
+    }
+}
+
+@Suite("Show Desktop window classification")
+struct StageManagerShowDesktopWindowPolicyTests {
+    private let displayFrame = CGRect(
+        x: 0,
+        y: 0,
+        width: 2560,
+        height: 1440
+    )
+
+    @Test("Small Stage Manager thumbnails at either edge are ignored")
+    func edgeThumbnailsAreRecognized() {
+        #expect(StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+            windowFrame: CGRect(x: 15, y: 650, width: 166, height: 161),
+            displayFrames: [displayFrame]
+        ))
+        #expect(StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+            windowFrame: CGRect(x: 2379, y: 650, width: 166, height: 161),
+            displayFrames: [displayFrame]
+        ))
+    }
+
+    @Test("Central and large edge windows remain ordinary workspace windows")
+    func ordinaryWindowsAreNotThumbnails() {
+        #expect(!StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+            windowFrame: CGRect(x: 500, y: 300, width: 166, height: 161),
+            displayFrames: [displayFrame]
+        ))
+        #expect(!StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+            windowFrame: CGRect(x: 0, y: 100, width: 900, height: 900),
+            displayFrames: [displayFrame]
+        ))
+    }
+
+    @Test("WindowServer records entirely outside every display are ignored")
+    func offscreenRecordsAreNotWorkspaceWindows() {
+        let offscreenThumbnail = CGRect(
+            x: -269,
+            y: 1021,
+            width: 166,
+            height: 184
+        )
+
+        #expect(!StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+            windowFrame: offscreenThumbnail,
+            displayFrames: [displayFrame]
+        ))
+        #expect(StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+            windowFrame: CGRect(x: 500, y: 300, width: 800, height: 700),
+            displayFrames: [displayFrame]
+        ))
+    }
+
+    @Test("Windows on negative-origin secondary displays remain ordinary")
+    func negativeOriginDisplaysAreHandled() {
+        let secondaryDisplay = CGRect(
+            x: -1920,
+            y: 0,
+            width: 1920,
+            height: 1080
+        )
+
+        #expect(StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+            windowFrame: CGRect(
+                x: -1500,
+                y: 180,
+                width: 900,
+                height: 700
+            ),
+            displayFrames: [displayFrame, secondaryDisplay]
+        ))
+    }
+
+    @Test("A partially visible window remains ordinary")
+    func partiallyVisibleWindowsAreHandled() {
+        #expect(StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+            windowFrame: CGRect(x: -100, y: 300, width: 800, height: 700),
+            displayFrames: [displayFrame]
+        ))
+    }
+
+    @Test("Touching a display edge without visible area remains offscreen")
+    func zeroAreaIntersectionsAreIgnored() {
+        #expect(!StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+            windowFrame: CGRect(x: -200, y: 300, width: 200, height: 700),
+            displayFrames: [displayFrame]
+        ))
+    }
+
+    @Test("Sidebar thumbnails are recognized on offset displays")
+    func offsetDisplayThumbnailsAreRecognized() {
+        let secondaryDisplay = CGRect(
+            x: 2560,
+            y: 100,
+            width: 1920,
+            height: 1080
+        )
+
+        #expect(StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+            windowFrame: CGRect(x: 2575, y: 650, width: 166, height: 161),
+            displayFrames: [displayFrame, secondaryDisplay]
+        ))
+        #expect(StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+            windowFrame: CGRect(x: 4299, y: 650, width: 166, height: 161),
+            displayFrames: [displayFrame, secondaryDisplay]
+        ))
+    }
+}
+
 @Suite("Stage Manager fullscreen fallback policy")
 struct StageManagerFullscreenFallbackPolicyTests {
     private let chromeBundleIdentifier = "com.google.Chrome"

@@ -392,6 +392,67 @@ expect(
     ) == .unavailable(.permissionRequired),
     "missing Accessibility permission fails closed"
 )
+expect(
+    StageManagerGroupProtectionPolicy.evaluate(
+        featureEnabled: true,
+        groupingState: .showingDesktop,
+        explicitActions: [:]
+    ) == .unavailable(.showingDesktop),
+    "Show Desktop uses a distinct fail-closed reason"
+)
+let showDesktopObservation = StageManagerShowDesktopObservation(
+    frontmostProcessIdentifier: 42,
+    frontmostBundleIdentifier: "com.example.frontmost",
+    hasOrdinaryOnscreenApplicationWindow: false
+)
+expect(
+    StageManagerShowDesktopDetectionPolicy.isShowingDesktop(
+        normalReadFailedWithCompatibleStructureError: true,
+        stageManagerIsEnabled: true,
+        isPointerInteractionInProgress: false,
+        firstObservation: showDesktopObservation,
+        secondObservation: showDesktopObservation
+    ),
+    "stable empty workspace evidence identifies Show Desktop"
+)
+expect(
+    StageManagerShowDesktopWindowPolicy.isSidebarThumbnail(
+        windowFrame: CGRect(x: 15, y: 650, width: 166, height: 161),
+        displayFrames: [CGRect(x: 0, y: 0, width: 2560, height: 1440)]
+    ),
+    "Stage Manager sidebar thumbnails do not count as workspace windows"
+)
+expect(
+    !StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+        windowFrame: CGRect(x: -269, y: 1021, width: 166, height: 184),
+        displayFrames: [CGRect(x: 0, y: 0, width: 2560, height: 1440)]
+    ),
+    "offscreen WindowServer records do not block Show Desktop detection"
+)
+expect(
+    StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+        windowFrame: CGRect(x: -1500, y: 180, width: 900, height: 700),
+        displayFrames: [
+            CGRect(x: 0, y: 0, width: 2560, height: 1440),
+            CGRect(x: -1920, y: 0, width: 1920, height: 1080)
+        ]
+    ),
+    "windows on negative-origin secondary displays remain ordinary"
+)
+expect(
+    StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+        windowFrame: CGRect(x: -100, y: 300, width: 800, height: 700),
+        displayFrames: [CGRect(x: 0, y: 0, width: 2560, height: 1440)]
+    ),
+    "partially visible workspace windows remain ordinary"
+)
+expect(
+    !StageManagerShowDesktopWindowPolicy.isOrdinaryWorkspaceWindow(
+        windowFrame: CGRect(x: -200, y: 300, width: 200, height: 700),
+        displayFrames: [CGRect(x: 0, y: 0, width: 2560, height: 1440)]
+    ),
+    "zero-area display intersections remain offscreen"
+)
 let firstReleaseObservation = StageManagerProtectionTransitionPolicy.transition(
     current: [stageHideBundle],
     pendingReleaseCandidate: nil,
@@ -546,6 +607,36 @@ expect(
 expect(
     AutoAction.rulePickerOrder == [.ignore, .unset, .hide, .quit],
     "the rule picker follows the visible section order"
+)
+expect(
+    AutomationPolicy.durationOptions(
+        for: .hide,
+        currentMinutes: AutomationDefaults.defaultHideMinutes
+    ) == [5, 10, 30, 60],
+    "automatic hide uses the concise hide duration presets"
+)
+expect(
+    AutomationPolicy.durationOptions(
+        for: .quit,
+        currentMinutes: AutomationDefaults.defaultQuitMinutes
+    ) == [30, 60, 120, 300, 1_440],
+    "automatic quit uses the safer quit duration presets"
+)
+expect(
+    AutomationPolicy.durationOptions(for: .hide, currentMinutes: 20) == [5, 10, 20, 30, 60],
+    "a saved legacy hide duration remains available"
+)
+expect(
+    AutomationPolicy.durationOptions(for: .quit, currentMinutes: 10)
+        == [10, 30, 60, 120, 300, 1_440],
+    "a saved legacy quit duration remains available"
+)
+expect(
+    AutomationPolicy.durationOptions(
+        for: .unset,
+        currentMinutes: AutomationDefaults.defaultHideMinutes
+    ).isEmpty,
+    "a rule without an automatic action has no duration presets"
 )
 expect(
     AutomationPolicy.effectiveAction(explicitAction: .unset, defaultHideEnabled: false) == .unset,

@@ -506,6 +506,38 @@ struct AutomationPolicyTests {
         #expect(AutoAction.rulePickerOrder == [.ignore, .unset, .hide, .quit])
     }
 
+    @Test("Hide and quit rules use action-specific duration presets")
+    func actionSpecificDurationPresets() {
+        #expect(AutomationPolicy.durationOptions(
+            for: .hide,
+            currentMinutes: AutomationDefaults.defaultHideMinutes
+        ) == [5, 10, 30, 60])
+        #expect(AutomationPolicy.durationOptions(
+            for: .quit,
+            currentMinutes: AutomationDefaults.defaultQuitMinutes
+        ) == [30, 60, 120, 300, 1_440])
+        #expect(AutomationPolicy.durationOptions(
+            for: .unset,
+            currentMinutes: AutomationDefaults.defaultHideMinutes
+        ).isEmpty)
+        #expect(AutomationPolicy.durationOptions(
+            for: .ignore,
+            currentMinutes: AutomationDefaults.defaultHideMinutes
+        ).isEmpty)
+    }
+
+    @Test("A saved legacy duration remains available in its rule picker")
+    func durationPresetsPreserveSavedLegacyValue() {
+        #expect(AutomationPolicy.durationOptions(
+            for: .hide,
+            currentMinutes: 20
+        ) == [5, 10, 20, 30, 60])
+        #expect(AutomationPolicy.durationOptions(
+            for: .quit,
+            currentMinutes: 10
+        ) == [10, 30, 60, 120, 300, 1_440])
+    }
+
     @Test("An app without a rule inherits default hide")
     func unsetInheritsDefaultHide() {
         #expect(AutomationPolicy.effectiveAction(

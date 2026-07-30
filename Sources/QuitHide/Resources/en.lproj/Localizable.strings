@@ -103,6 +103,7 @@
 "status.in_use" = "In Use";
 "status.stage_manager.group_protected" = "Protected by Stage Manager Group";
 "status.stage_manager.unavailable_paused" = "Group Detection Unavailable · Automation Paused";
+"status.stage_manager.showing_desktop" = "Showing Desktop";
 "status.window_protection.waiting_for_stability" = "Windows Are Changing · Automation Temporarily Paused";
 "status.window_protection.unavailable_paused" = "Window Protection Unavailable · Automation Paused";
 "status.waiting_for_background" = "Waiting for Background";
@@ -143,6 +144,7 @@
 "settings.stage_manager_protection.active_count" = "Active · Automatic-rule apps protected: {count}";
 "settings.stage_manager_protection.permission_required" = "Accessibility permission is required. Automation pauses while Stage Manager is on until access is granted.";
 "settings.stage_manager_protection.unavailable" = "Groups cannot be read reliably right now, so automation is paused";
+"settings.stage_manager_protection.showing_desktop" = "Showing Desktop; automation is temporarily paused";
 "settings.stage_manager_protection.grant_permission" = "Grant Accessibility Permission…";
 "settings.screen_visibility_protection.enabled" = "Protect Apps Visible on Screen";
 "settings.screen_visibility_protection.help" = "Applies only while Stage Manager is off. An app with an automatic rule is not hidden or quit while any of its windows remains visible; its timer starts from zero only after every window is completely covered by normal windows. Apps without automatic rules are not protected, but their windows still count as occluders. No extra permission is needed, and screen contents are never read. Coverage uses window frames, so transparent or irregular windows may still count by their full frame.";

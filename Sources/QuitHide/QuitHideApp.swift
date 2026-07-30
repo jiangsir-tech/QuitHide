@@ -125,6 +125,7 @@ enum StageManagerGroupProtectionStatus: Equatable {
     case off
     case checking
     case waitingForStability
+    case showingDesktop
     case dormant
     case active(protectedAutomaticAppCount: Int)
     case permissionRequired
@@ -816,10 +817,14 @@ final class AppModel: ObservableObject {
             )
         }
         if automaticWindowProcessingIsUnavailable {
-            let statusKey: L10n.Key =
-                automaticWindowProtectionIsWaitingForStability
-                    ? .statusWindowProtectionWaitingForStability
-                    : .statusWindowProtectionUnavailablePaused
+            let statusKey: L10n.Key
+            if stageManagerGroupProtectionStatus == .showingDesktop {
+                statusKey = .statusStageManagerShowingDesktop
+            } else if automaticWindowProtectionIsWaitingForStability {
+                statusKey = .statusWindowProtectionWaitingForStability
+            } else {
+                statusKey = .statusWindowProtectionUnavailablePaused
+            }
             return AppAutomationStatus(
                 text: localized(statusKey),
                 isError: false
@@ -2213,7 +2218,8 @@ final class AppModel: ObservableObject {
         switch activeAutomaticWindowProtectionMode {
         case .stageManager:
             if stageManagerGroupProtectionStatus != .unavailable,
-               stageManagerGroupProtectionStatus != .permissionRequired {
+               stageManagerGroupProtectionStatus != .permissionRequired,
+               stageManagerGroupProtectionStatus != .showingDesktop {
                 stageManagerGroupProtectionStatus = .waitingForStability
             }
         case .screenVisibility:
@@ -2695,6 +2701,9 @@ final class AppModel: ObservableObject {
                 if reason == .permissionRequired {
                     resetStageManagerProtectionReadFailures()
                     stageManagerGroupProtectionStatus = .permissionRequired
+                } else if reason == .showingDesktop {
+                    resetStageManagerProtectionReadFailures()
+                    stageManagerGroupProtectionStatus = .showingDesktop
                 } else {
                     stageManagerGroupProtectionStatus =
                         stageManagerProtectionReadFailureStatus(
@@ -3224,18 +3233,10 @@ struct AppRow: View {
     }
 
     private var minuteOptions: [Int] {
-        let presets = [
-            2,
-            5,
-            10,
-            20,
-            AutomationDefaults.defaultHideMinutes,
-            60,
-            AutomationDefaults.defaultQuitMinutes,
-            300,
-            1_440
-        ]
-        return Array(Set(presets + [model.idleMinutes(for: item.bundleIdentifier)])).sorted()
+        AutomationPolicy.durationOptions(
+            for: explicitAction,
+            currentMinutes: model.idleMinutes(for: item.bundleIdentifier)
+        )
     }
 
     private func immediateMenuTitle(for action: AutoAction) -> String {
@@ -3383,6 +3384,10 @@ struct AppRow: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .help(model.localized(.rowDelayInherited))
+                } else if explicitAction == .ignore {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .accessibilityHidden(true)
                 } else if !explicitAction.isAutomated {
                     Text("—")
                         .foregroundStyle(.tertiary)
@@ -3492,6 +3497,14 @@ struct SettingsSheet: View {
                     .settingsStageManagerProtectionWaitingForStability
                 ),
                 "arrow.triangle.2.circlepath",
+                .secondary
+            )
+        case .showingDesktop:
+            return (
+                model.localized(
+                    .settingsStageManagerProtectionShowingDesktop
+                ),
+                "desktopcomputer",
                 .secondary
             )
         case .dormant:
@@ -3862,7 +3875,7 @@ struct SettingsSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 440)
+        .frame(width: 480)
         .environment(\.locale, model.effectiveLocale)
         .background {
             SettingsWindowConfigurator(title: model.localized(.settingsTitle))
@@ -4120,6 +4133,8 @@ struct MenuContentView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var catalogScope: RuleCatalogScope = .running
     @State private var pendingForceQuitRequest: ForceQuitRequest?
+    @State private var isQuitButtonHovered = false
+    @State private var isSearchFieldHovered = false
     @FocusState private var isSearchFocused: Bool
 
     private enum AppSection {
@@ -4307,7 +4322,13 @@ struct MenuContentView: View {
                         isSearchFocused = true
                     } label: {
                         Image(systemName: "magnifyingglass")
-                            .foregroundStyle(isSearching ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(
+                                isSearchFocused || isSearching
+                                    ? Color.primary.opacity(0.82)
+                                    : Color.primary.opacity(
+                                        isSearchFieldHovered ? 0.72 : 0.62
+                                    )
+                            )
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -4316,15 +4337,25 @@ struct MenuContentView: View {
                     .accessibilityLabel(model.localized(.a11ySearchFocus))
 
                     TextField(
-                        model.localized(
+                        "",
+                        text: $model.searchText,
+                        prompt: Text(model.localized(
                             catalogScope == .running
                                 ? .menuSearchRunningPlaceholder
                                 : .menuSearchRulesPlaceholder
-                        ),
-                        text: $model.searchText
+                        ))
+                        .foregroundColor(
+                            Color.primary.opacity(
+                                isSearchFocused || isSearchFieldHovered
+                                    ? 0.68
+                                    : 0.58
+                            )
+                        )
                     )
                         .textFieldStyle(.plain)
+                        .font(.body)
                         .focused($isSearchFocused)
+                        .layoutPriority(1)
                         .onExitCommand {
                             model.searchText = ""
                             isSearchFocused = false
@@ -4336,24 +4367,61 @@ struct MenuContentView: View {
                             isSearchFocused = true
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(.secondary)
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .help(model.localized(.menuSearchClear))
                         .accessibilityLabel(model.localized(.a11ySearchClear))
+                    } else {
+                        Text("⌘F")
+                            .font(.body)
+                            .foregroundStyle(
+                                Color.primary.opacity(
+                                    isSearchFocused
+                                        ? 0.62
+                                        : (isSearchFieldHovered ? 0.60 : 0.46)
+                                )
+                            )
+                            .fixedSize()
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(.horizontal, 8)
                 .frame(width: 190, height: 28)
-                .background(
-                    Color.primary.opacity(0.07),
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .contentShape(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
                 )
+                .onTapGesture {
+                    isSearchFocused = true
+                }
+                .onHover { isHovering in
+                    isSearchFieldHovered = isHovering
+                }
+                .background {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(Color.primary.opacity(
+                            isSearchFocused
+                                ? 0.13
+                                : (isSearchFieldHovered ? 0.12 : 0.09)
+                        ))
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(
+                            isSearchFocused
+                                ? Color.primary.opacity(0.30)
+                                : Color.primary.opacity(
+                                    isSearchFieldHovered ? 0.22 : 0.14
+                                ),
+                            lineWidth: isSearchFocused ? 1 : 0.5
+                        )
                 }
+                .animation(
+                    .easeOut(duration: 0.12),
+                    value: isSearchFieldHovered
+                )
+                .animation(.easeOut(duration: 0.12), value: isSearchFocused)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 10)
@@ -4461,7 +4529,7 @@ struct MenuContentView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 16)
                     .padding(.top, 5)
                     .padding(.bottom, 9)
                 }
@@ -4530,11 +4598,20 @@ struct MenuContentView: View {
                         }
                         .buttonStyle(.plain)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(
+                            isQuitButtonHovered ? Color.primary : Color.secondary
+                        )
+                        .underline(isQuitButtonHovered)
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.12)) {
+                                isQuitButtonHovered = isHovering
+                            }
+                        }
                         .help(model.localized(.menuQuitApp))
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
         }
         .frame(width: 440, height: menuHeight, alignment: .top)
@@ -4602,6 +4679,8 @@ struct MenuContentView: View {
 
     private func resetForMenuPresentation(refreshApps: Bool) {
         pendingForceQuitRequest = nil
+        isQuitButtonHovered = false
+        isSearchFieldHovered = false
         catalogScope = .running
         model.searchText = ""
         isSearchFocused = false
@@ -4637,7 +4716,7 @@ struct MenuContentView: View {
                 .font(.caption.weight(isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                 .padding(.horizontal, 10)
-                .frame(height: 26)
+                .frame(height: 28)
                 .background(
                     isSelected ? Color.primary.opacity(0.09) : Color.clear,
                     in: Capsule()
