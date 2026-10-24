@@ -85,6 +85,11 @@
 "context.quit.all_instances" = "Quit Now (All {count} Instances)";
 "context.force_quit" = "Force Quit…";
 "context.force_quit.all_instances" = "Force Quit All {count} Instances…";
+"context.defer.title" = "Defer Automatic Action";
+"context.defer.minutes15" = "15 minutes";
+"context.defer.minutes30" = "30 minutes";
+"context.defer.minutes60" = "60 minutes";
+"context.defer.end" = "End Deferral Early";
 
 /* Automation status */
 "status.force_quit.in_progress" = "Force Quitting…";
@@ -100,8 +105,20 @@
 "status.action.failed_retry" = "{action} Failed · Will Retry";
 "status.action.failed_manual" = "{action} Failed · Try Manually";
 "status.active" = "In Use · Waiting to Start";
+"status.other_desktop_window" = "Open on Another Desktop · Timer Paused";
+"status.other_desktop_window.help" = "A visible window exists on another desktop. QuitHide pauses the automatic hide or quit timer until that desktop is active or the window is closed.";
+"status.minimized_window.protected" = "Window Minimized · Automatic Quit Paused";
+"status.minimized_window.unavailable" = "Minimized State Unknown · Automatic Quit Paused";
+"status.parallels_vm.in_use" = "Virtual Machine Running · Parallels Stays Open";
+"status.parallels_vm.in_use.help" = "QuitHide keeps Parallels Desktop open while the VM process runs. Windows apps in Parallels keep the VM in use; after all of them close, the VM's own countdown can finish. When its process stops, QuitHide requests a normal quit for Parallels Desktop.";
+"status.parallels_vm.unavailable" = "Virtual Machine State Unknown · Automation Paused";
+"status.parallels_vm.unavailable.help" = "QuitHide cannot currently verify whether a Parallels virtual machine is running, so it pauses automatic hide and quit for Parallels Desktop until the state can be checked.";
 "status.in_use" = "In Use";
 "status.stage_manager.group_protected" = "Protected by Stage Manager Group";
+"status.app_deferral.active" = "Manual deferral · {time} left";
+"status.app_deferral.help" = "A full idle interval starts after the deferral ends.";
+"status.screen_visibility.protected" = "Visible window protected";
+"status.stage_manager.foreground_group_protected" = "Stage Manager foreground group protected";
 "status.stage_manager.unavailable_paused" = "Group Detection Unavailable · Automation Paused";
 "status.stage_manager.showing_desktop" = "Showing Desktop";
 "status.window_protection.waiting_for_stability" = "Windows Are Changing · Automation Temporarily Paused";
@@ -118,6 +135,9 @@
 "status.instances.same_status" = "Running instances: {count} · {status}";
 "status.instances.separate_timers" = "Running instances: {count} · Separate timers";
 "status.instances.paused_separate_timers" = "Paused · Running instances: {count} · Separate timers";
+"status.instances.deferred_mixed" = "Running instances: {count} · Deferred: {deferredCount}";
+"status.instances.operation_in_progress" = "Running instances: {count} · Actions in progress: {operationCount}";
+"status.instances.operation_in_progress_with_deferrals" = "Running instances: {count} · Actions in progress: {operationCount} · Deferred: {deferredCount}";
 
 /* Dynamic help */
 "help.rule_registry.batch_unavailable" = "These rules were created by a newer version and cannot be read. Rule-dependent batch actions are unavailable.";
@@ -154,6 +174,12 @@
 "settings.screen_visibility_protection.active" = "Active · No automatic-rule apps currently need protection";
 "settings.screen_visibility_protection.active_count" = "Active · Visible automatic-rule apps protected: {count}";
 "settings.screen_visibility_protection.unavailable" = "Window visibility cannot be determined reliably right now, so automation is paused";
+"settings.minimized_window_protection.title" = "Protect Minimized Windows from Automatic Quit";
+"settings.minimized_window_protection.help" = "Apps with an automatic quit rule pause their quit countdown while any window is minimized; restoring the window starts a fresh countdown. Accessibility reads only the minimized state, not window contents. Accessibility permission is required.";
+"settings.minimized_window_protection.active" = "Active · Automatic quit pauses for minimized apps";
+"settings.minimized_window_protection.permission_required" = "Accessibility permission is required to detect minimized windows";
+"settings.minimized_window_protection.unavailable" = "Some app window states could not be read; automatic quit is paused for those apps";
+"settings.minimized_window_protection.grant_permission" = "Grant Accessibility Permission…";
 "settings.about.title" = "About QuitHide";
 "settings.about.author" = "Author: 江sir爱数码";
 "settings.about.feedback" = "Feedback via WeChat: jsasm1";

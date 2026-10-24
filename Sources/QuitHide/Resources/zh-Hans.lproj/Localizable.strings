@@ -85,6 +85,11 @@
 "context.quit.all_instances" = "立即退出（全部 {count} 个实例）";
 "context.force_quit" = "强制退出…";
 "context.force_quit.all_instances" = "强制退出全部 {count} 个实例…";
+"context.defer.title" = "延期自动处理";
+"context.defer.minutes15" = "15 分钟";
+"context.defer.minutes30" = "30 分钟";
+"context.defer.minutes60" = "60 分钟";
+"context.defer.end" = "提前结束延期";
 
 /* Automation status */
 "status.force_quit.in_progress" = "正在强制退出…";
@@ -100,8 +105,20 @@
 "status.action.failed_retry" = "{action}失败 · 稍后重试";
 "status.action.failed_manual" = "{action}失败 · 请手动重试";
 "status.active" = "使用中 · 离开后计时";
+"status.other_desktop_window" = "其他桌面有窗口 · 暂停计时";
+"status.other_desktop_window.help" = "应用窗口在其他桌面可见。QuitHide 会暂停该应用的自动隐藏或退出计时；切回当前桌面或关闭该窗口后恢复计时。";
+"status.minimized_window.protected" = "窗口已最小化 · 暂停自动退出";
+"status.minimized_window.unavailable" = "无法确认最小化状态 · 暂停自动退出";
+"status.parallels_vm.in_use" = "虚拟机正在运行 · 保持 Parallels 打开";
+"status.parallels_vm.in_use.help" = "虚拟机进程运行期间，QuitHide 会保持 Parallels Desktop 打开。Parallels 中的 Windows 应用会让虚拟机保持使用状态；这些应用全部退出后，虚拟机自己的倒计时可以结束。虚拟机进程停止后，QuitHide 会正常请求退出 Parallels Desktop。";
+"status.parallels_vm.unavailable" = "虚拟机状态无法确认 · 自动操作已暂停";
+"status.parallels_vm.unavailable.help" = "QuitHide 暂时无法确认 Parallels 虚拟机状态，因此暂停 Parallels Desktop 的自动隐藏和自动退出。稍后确认状态后再恢复计时。";
 "status.in_use" = "使用中";
 "status.stage_manager.group_protected" = "台前调度分组保护中";
+"status.app_deferral.active" = "手动延期 · 还剩 {time}";
+"status.app_deferral.help" = "延期结束后，将重新开始完整的闲置计时。";
+"status.screen_visibility.protected" = "可见窗口保护中";
+"status.stage_manager.foreground_group_protected" = "台前调度前台分组保护中";
 "status.stage_manager.unavailable_paused" = "分组识别不可用 · 自动处理已暂停";
 "status.stage_manager.showing_desktop" = "正在显示桌面";
 "status.window_protection.waiting_for_stability" = "窗口正在变化 · 自动处理暂时暂停";
@@ -118,6 +135,9 @@
 "status.instances.same_status" = "{count} 个运行实例 · {status}";
 "status.instances.separate_timers" = "{count} 个运行实例 · 分别计时";
 "status.instances.paused_separate_timers" = "已暂停 · {count} 个运行实例 · 分别计时";
+"status.instances.deferred_mixed" = "运行实例：{count} · 手动延期：{deferredCount}";
+"status.instances.operation_in_progress" = "{count} 个运行实例 · {operationCount} 个操作进行中";
+"status.instances.operation_in_progress_with_deferrals" = "{count} 个运行实例 · {operationCount} 个操作进行中 · 延期：{deferredCount}";
 
 /* Dynamic help */
 "help.rule_registry.batch_unavailable" = "规则来自更高版本，当前版本无法解析，不能执行依赖规则的批量操作";
@@ -154,6 +174,12 @@
 "settings.screen_visibility_protection.active" = "已生效 · 当前没有自动规则 App 需要保护";
 "settings.screen_visibility_protection.active_count" = "已生效 · 正在保护 {count} 个屏幕可见 App";
 "settings.screen_visibility_protection.unavailable" = "暂时无法可靠判断窗口可见性，自动处理已暂停";
+"settings.minimized_window_protection.title" = "最小化窗口保护";
+"settings.minimized_window_protection.help" = "设置为自动退出的 App 在有窗口最小化时暂停退出倒计时；还原窗口后从零开始计时。仅读取辅助功能窗口的最小化状态，不读取窗口内容。此功能需要辅助功能权限。";
+"settings.minimized_window_protection.active" = "已生效 · 最小化的自动退出 App 会暂停计时";
+"settings.minimized_window_protection.permission_required" = "需要辅助功能权限；未授权时无法识别最小化窗口";
+"settings.minimized_window_protection.unavailable" = "部分 App 的窗口状态无法读取；这些 App 的自动退出计时已暂停";
+"settings.minimized_window_protection.grant_permission" = "授予辅助功能权限…";
 "settings.about.title" = "关于 QuitHide";
 "settings.about.author" = "作者：江sir爱数码";
 "settings.about.feedback" = "有问题可以加江sir微信进行反馈：jsasm1";

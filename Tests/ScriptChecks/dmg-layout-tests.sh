@@ -3,6 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="${0:A:h:h:h}"
 VERIFY_LAYOUT="$PROJECT_DIR/scripts/verify-dmg-layout.sh"
+RENDER_BACKGROUND="$PROJECT_DIR/scripts/render-dmg-background.swift"
 FIXTURE_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/QuitHide-dmg-layout-tests.XXXXXX")"
 
 cleanup() {
@@ -12,10 +13,11 @@ trap cleanup EXIT
 
 /bin/mkdir -p "$FIXTURE_DIR/.background" "$FIXTURE_DIR/QuitHide.app"
 /bin/ln -s /Applications "$FIXTURE_DIR/Applications"
-/usr/bin/sips \
-    -s format png \
+/usr/bin/swift "$RENDER_BACKGROUND" \
     "$PROJECT_DIR/Resources/DMGBackground.svg" \
-    --out "$FIXTURE_DIR/.background/DMGBackground.png" >/dev/null
+    "$FIXTURE_DIR/.background/DMGBackground.png" \
+    660 \
+    420
 
 /usr/bin/printf \
     'Bud1\n.bwspblob\n.icvpblob\nbackgroundImageAlias\nDMGBackground.png\n.background\npIlocblob\nsIlocblob\n' \

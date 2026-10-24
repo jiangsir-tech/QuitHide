@@ -135,6 +135,175 @@ struct ApplicationUnhidePolicyTests {
     }
 }
 
+@Suite("Application foreground policy")
+struct ApplicationForegroundPolicyTests {
+    @Test("The workspace frontmost process is marked active and clears its idle timer")
+    func frontmostProcessClearsIdleTimer() {
+        let applicationIsActive = ApplicationForegroundPolicy.isActive(
+            processIdentifier: 42,
+            frontmostProcessIdentifier: 42
+        )
+
+        #expect(applicationIsActive)
+        #expect(ApplicationIdleTimerPolicy.directive(
+            actionIsAutomated: true,
+            applicationIsActive: applicationIsActive,
+            applicationIsHeld: false,
+            hasTimer: true
+        ) == .clear)
+    }
+
+    @Test("Another process is not considered frontmost")
+    func nonFrontmostProcessDoesNotMatch() {
+        #expect(!ApplicationForegroundPolicy.isActive(
+            processIdentifier: 41,
+            frontmostProcessIdentifier: 42
+        ))
+    }
+
+    @Test("An unknown frontmost process does not mark a running app active")
+    func missingFrontmostProcessDoesNotMatch() {
+        #expect(!ApplicationForegroundPolicy.isActive(
+            processIdentifier: 42,
+            frontmostProcessIdentifier: nil
+        ))
+    }
+}
+
+@Suite("Application inactive-space visibility policy")
+struct ApplicationInactiveSpaceVisibilityPolicyTests {
+    @Test("Visible windows on another desktop identify and protect their app")
+    func visibleInactiveSpaceWindowIdentifiesItsOwner() {
+        let processIdentifiers = ApplicationInactiveSpaceVisibilityPolicy
+            .processIdentifiersWithVisibleWindowsOnInactiveSpaces(
+                activeSpaceWindowIDs: [10, 20],
+                allSpaceWindowIDs: [10, 20, 30, 40],
+                windowOwners: [10: 1, 20: 2, 30: 42]
+            )
+
+        #expect(processIdentifiers == [42])
+        #expect(ApplicationIdleTimerPolicy.directive(
+            actionIsAutomated: true,
+            applicationIsActive: false,
+            applicationIsHeld: false,
+            applicationHasVisibleWindowOnAnotherSpace: true,
+            hasTimer: true
+        ) == .clear)
+    }
+
+    @Test("A fullscreen window on a separate Space keeps its app timer paused")
+    func fullscreenWindowOnSeparateSpaceIsProtected() {
+        let processIdentifiers = ApplicationInactiveSpaceVisibilityPolicy
+            .processIdentifiersWithVisibleWindowsOnInactiveSpaces(
+                activeSpaceWindowIDs: [10],
+                allSpaceWindowIDs: [10, 30],
+                windowOwners: [10: 1, 30: 42]
+            )
+        let hasVisibleWindowOnAnotherSpace = processIdentifiers.contains(42)
+
+        #expect(hasVisibleWindowOnAnotherSpace)
+        #expect(ApplicationIdleTimerPolicy.directive(
+            actionIsAutomated: true,
+            applicationIsActive: false,
+            applicationIsHeld: false,
+            applicationHasVisibleWindowOnAnotherSpace:
+                hasVisibleWindowOnAnotherSpace,
+            hasTimer: true
+        ) == .clear)
+    }
+
+    @Test("An app with windows only in the active desktop is not protected")
+    func activeSpaceWindowDoesNotCountAsInactiveSpacePresence() {
+        let processIdentifiers = ApplicationInactiveSpaceVisibilityPolicy
+            .processIdentifiersWithVisibleWindowsOnInactiveSpaces(
+                activeSpaceWindowIDs: [10, 20],
+                allSpaceWindowIDs: [10, 20],
+                windowOwners: [10: 42, 20: 7]
+            )
+
+        #expect(processIdentifiers.isEmpty)
+    }
+
+    @Test("Window IDs without an owner are ignored")
+    func missingWindowOwnerIsIgnored() {
+        let processIdentifiers = ApplicationInactiveSpaceVisibilityPolicy
+            .processIdentifiersWithVisibleWindowsOnInactiveSpaces(
+                activeSpaceWindowIDs: [],
+                allSpaceWindowIDs: [30],
+                windowOwners: [:]
+            )
+
+        #expect(processIdentifiers.isEmpty)
+    }
+}
+
+@Suite("Minimized application quit protection")
+struct MinimizedApplicationQuitProtectionTests {
+    @Test("A minimized app clears its automatic quit countdown")
+    func minimizedAppClearsQuitCountdown() {
+        let applicationIsHeld =
+            ApplicationMinimizedWindowProtectionPolicy
+                .shouldHoldQuitCountdown(
+                    action: .quit,
+                    hasMinimizedWindow: true
+                )
+
+        #expect(applicationIsHeld)
+        #expect(ApplicationIdleTimerPolicy.directive(
+            actionIsAutomated: true,
+            applicationIsActive: false,
+            applicationIsHeld: applicationIsHeld,
+            hasTimer: true
+        ) == .clear)
+    }
+
+    @Test("Restoring the minimized app starts a fresh quit countdown")
+    func restoredAppStartsFreshQuitCountdown() {
+        let applicationIsHeld =
+            ApplicationMinimizedWindowProtectionPolicy
+                .shouldHoldQuitCountdown(
+                    action: .quit,
+                    hasMinimizedWindow: false
+                )
+
+        #expect(!applicationIsHeld)
+        #expect(ApplicationIdleTimerPolicy.directive(
+            actionIsAutomated: true,
+            applicationIsActive: false,
+            applicationIsHeld: applicationIsHeld,
+            hasTimer: false
+        ) == .startNow)
+    }
+
+    @Test("Minimized windows do not change automatic hide timing")
+    func minimizedAppDoesNotChangeHideCountdown() {
+        let applicationIsHeld =
+            ApplicationMinimizedWindowProtectionPolicy
+                .shouldHoldQuitCountdown(
+                    action: .hide,
+                    hasMinimizedWindow: true
+                )
+
+        #expect(!applicationIsHeld)
+        #expect(ApplicationIdleTimerPolicy.directive(
+            actionIsAutomated: true,
+            applicationIsActive: false,
+            applicationIsHeld: applicationIsHeld,
+            hasTimer: false
+        ) == .startNow)
+    }
+
+    @Test("An unreadable minimized state pauses automatic quit safely")
+    func unreadableWindowStatePausesQuitCountdown() {
+        #expect(ApplicationMinimizedWindowProtectionPolicy
+            .shouldHoldQuitCountdown(
+                action: .quit,
+                hasMinimizedWindow: false,
+                windowStateIsUnavailable: true
+            ))
+    }
+}
+
 @Suite("Hide action runtime state")
 struct HideActionRuntimeStateTests {
     @Test("Only a real operation is presented as in progress")
@@ -380,6 +549,22 @@ struct PreQuitHideTimingTests {
             canAttemptHide: false
         ) == .wait)
         #expect(decision(elapsed: 20, hideDelay: 5, quitDelay: 20) == .quit)
+    }
+
+    @Test("Post-validation timing gate preserves the pre-hide window")
+    func postValidationGateAllowsPreHideBeforeQuitDeadline() {
+        #expect(AppAutomationActionValidationPolicy
+            .hasReachedRequiredTimingThreshold(
+                isPreQuitHide: true,
+                elapsed: 10,
+                actionDelay: 20
+            ))
+        #expect(!AppAutomationActionValidationPolicy
+            .hasReachedRequiredTimingThreshold(
+                isPreQuitHide: false,
+                elapsed: 10,
+                actionDelay: 20
+            ))
     }
 
     @Test("An equal hide and quit delay never pre-hides")

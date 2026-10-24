@@ -194,6 +194,47 @@ struct LocalizationResourceTests {
         #expect(english.text(.appInstallationTitle) == "Install QuitHide First")
     }
 
+    @Test("Deferral copy resolves in both languages")
+    func deferralCopyResolvesInBothLanguages() {
+        let chinese = localization(.simplifiedChinese)
+        let english = localization(.english)
+
+        #expect(chinese.text(.contextDeferTitle) == "延期自动处理")
+        #expect(chinese.text(.contextDeferMinutes15) == "15 分钟")
+        #expect(chinese.text(.contextDeferEnd) == "提前结束延期")
+        #expect(chinese.text(
+            .statusAppDeferralActive,
+            replacements: ["time": "12:34"]
+        ) == "手动延期 · 还剩 12:34")
+        #expect(chinese.text(.statusAppDeferralHelp) ==
+            "延期结束后，将重新开始完整的闲置计时。")
+        #expect(chinese.text(.statusScreenVisibilityProtected) == "可见窗口保护中")
+        #expect(chinese.text(.statusStageManagerForegroundGroupProtected) ==
+            "台前调度前台分组保护中")
+        #expect(chinese.text(
+            .statusInstancesDeferredMixed,
+            replacements: ["deferredCount": "1", "count": "2"]
+        ) == "运行实例：2 · 手动延期：1")
+
+        #expect(english.text(.contextDeferTitle) == "Defer Automatic Action")
+        #expect(english.text(.contextDeferMinutes15) == "15 minutes")
+        #expect(english.text(.contextDeferEnd) == "End Deferral Early")
+        #expect(english.text(
+            .statusAppDeferralActive,
+            replacements: ["time": "12:34"]
+        ) == "Manual deferral · 12:34 left")
+        #expect(english.text(.statusAppDeferralHelp) ==
+            "A full idle interval starts after the deferral ends.")
+        #expect(english.text(.statusScreenVisibilityProtected) ==
+            "Visible window protected")
+        #expect(english.text(.statusStageManagerForegroundGroupProtected) ==
+            "Stage Manager foreground group protected")
+        #expect(english.text(
+            .statusInstancesDeferredMixed,
+            replacements: ["deferredCount": "1", "count": "2"]
+        ) == "Running instances: 2 · Deferred: 1")
+    }
+
     @Test("Named tokens are replaced without changing unknown tokens")
     func namedTokenReplacement() {
         let chinese = localization(.simplifiedChinese)

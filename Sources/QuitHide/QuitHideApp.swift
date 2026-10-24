@@ -3,6 +3,17 @@ import OSLog
 import ServiceManagement
 import SwiftUI
 
+private enum MenuLayout {
+    static let panelWidth: CGFloat = 360
+    static let settingsWidth: CGFloat = 432
+    static let horizontalInset: CGFloat = 12
+    static let ruleColumnWidth: CGFloat = 102
+    static let delayColumnWidth: CGFloat = 76
+    static let searchFieldWidth: CGFloat = 160
+    static let appIconSize: CGFloat = 24
+    static let rowSpacing: CGFloat = 6
+}
+
 struct ActionSymbol: View {
     let action: AutoAction
 
@@ -30,7 +41,23 @@ struct RunningAppItem: Identifiable {
     let icon: NSImage
     let isHidden: Bool
     let isActive: Bool
+    let hasVisibleWindowOnAnotherSpace: Bool
+    let hasMinimizedWindow: Bool
+    let minimizedWindowStateIsUnavailable: Bool
+    let parallelsVMProcessState: ParallelsVirtualMachineProcessState
+    let parallelsVirtualMachineIsInUse: Bool
+    let isParallelsVirtualMachineProcess: Bool
     let app: NSRunningApplication
+
+    var isProtectedByParallelsVM: Bool {
+        ParallelsVirtualMachineProtectionPolicy.shouldProtect(
+            bundleIdentifier: bundleIdentifier,
+            applicationURL: app.bundleURL,
+            processState: parallelsVMProcessState,
+            virtualMachineIsInUse: parallelsVirtualMachineIsInUse,
+            isVirtualMachineProcess: isParallelsVirtualMachineProcess
+        )
+    }
 }
 
 struct CatalogAppItem: Identifiable {
@@ -80,11 +107,18 @@ private extension AppAutomationStatusTone {
     }
 }
 
+private enum AutomaticActionValidationStage: Equatable {
+    case preQuitHide
+    case finalAction
+}
+
 struct AppAutomationStatus {
     let text: String
     let isError: Bool
     let isWarning: Bool
     let isProtected: Bool
+    let isDeferred: Bool
+    let isOperationInProgress: Bool
     let helpText: String?
 
     init(
@@ -92,13 +126,52 @@ struct AppAutomationStatus {
         isError: Bool = false,
         isWarning: Bool = false,
         isProtected: Bool = false,
+        isDeferred: Bool = false,
+        isOperationInProgress: Bool = false,
         helpText: String? = nil
     ) {
         self.text = text
         self.isError = isError
         self.isWarning = isWarning
         self.isProtected = isProtected
+        self.isDeferred = isDeferred
+        self.isOperationInProgress = isOperationInProgress
         self.helpText = helpText
+    }
+
+    static func shouldPresentDeferralInsteadOfCompletedHide(
+        isDeferred: Bool,
+        hasHigherPriorityStatus: Bool
+    ) -> Bool {
+        isDeferred && !hasHigherPriorityStatus
+    }
+
+    static func shouldPresentCompletedHide(
+        automaticAction: AutoAction,
+        oneShotAction: AutoAction?,
+        hideIsCompleted: Bool
+    ) -> Bool {
+        hideIsCompleted &&
+            (automaticAction == .hide || oneShotAction == .hide)
+    }
+
+    static func mixedDeferredInstanceCount(
+        _ statuses: [AppAutomationStatus],
+        totalInstances: Int
+    ) -> Int? {
+        let deferredCount = statuses.filter(\.isDeferred).count
+        guard deferredCount > 0, deferredCount < totalInstances else {
+            return nil
+        }
+        return deferredCount
+    }
+
+    static func operationInProgressInstanceCount(
+        _ statuses: [AppAutomationStatus]
+    ) -> Int? {
+        let operationCount = statuses.filter(\.isOperationInProgress).count
+        guard operationCount > 0 else { return nil }
+        return operationCount
     }
 
     var tone: AppAutomationStatusTone {
@@ -226,6 +299,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var stageManagerGroupProtectionStatus: StageManagerGroupProtectionStatus
     @Published private(set) var screenVisibilityProtectionEnabled: Bool
     @Published private(set) var screenVisibilityProtectionStatus: ScreenVisibilityProtectionStatus
+    @Published private(set) var minimizedWindowProtectionStatus:
+        ApplicationMinimizedWindowProtectionStatus
     @Published private(set) var languagePreference: AppLanguagePreference
     @Published private(set) var resolvedLanguage: ResolvedAppLanguage
     // Operation status is intentionally not user-facing. Keep it out of the
@@ -260,9 +335,13 @@ final class AppModel: ObservableObject {
         any StageManagerSystemStateProviding
     private let stageManagerGroupingProvider: any StageManagerGroupingProviding
     private let screenVisibilityProvider: any ScreenVisibilityProviding
+    private let minimizedWindowProvider:
+        any ApplicationMinimizedWindowProviding
     private var ruleRegistry: StoredRuleRegistry
     private var isRuleRegistryWritable: Bool
     private var inactiveSince: [String: TimeInterval] = [:]
+    private var minimizedWindowProcessIdentifiers: Set<pid_t> = []
+    private var unavailableMinimizedWindowProcessIdentifiers: Set<pid_t> = []
     private var fallbackRuntimeGenerations: [FallbackRuntimeGeneration] = []
     private var alreadyHandled: Set<String> = []
     private var actionFailures: [String: AutoAction] = [:]
@@ -276,6 +355,8 @@ final class AppModel: ObservableObject {
     private var forceQuitFailures: Set<String> = []
     private var quitDeadlineAttempted: Set<String> = []
     private var preQuitHideStates: [String: PreQuitHideRuntimeState] = [:]
+    @Published private var appAutomationDeferralRegistry =
+        AppAutomationDeferralRegistry()
     private var timingSuspension = TimingSuspension()
     private var automaticallyProtectedBundleIdentifiers: Set<String> = []
     private var stageManagerHoldReasonsByBundleIdentifier:
@@ -303,6 +384,9 @@ final class AppModel: ObservableObject {
         AutomaticWindowProtectionFailurePresentationTracker()
     private var automaticWindowProtectionGeneration = 0
     private var workspaceSessionIsActive = true
+    private var parallelsDesktopStopCleanupTracker =
+        ParallelsDesktopStopCleanupTracker()
+    private var pendingParallelsDesktopQuitAfterVMStopToken: UUID?
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
 
@@ -315,13 +399,19 @@ final class AppModel: ObservableObject {
         stageManagerGroupingProvider: any StageManagerGroupingProviding =
             SystemStageManagerGroupingProvider(),
         screenVisibilityProvider: any ScreenVisibilityProviding =
-            SystemScreenVisibilityProvider()
+            SystemScreenVisibilityProvider(),
+        minimizedWindowProvider: any ApplicationMinimizedWindowProviding =
+            SystemApplicationMinimizedWindowProvider()
     ) {
         self.automationClock = automationClock
         self.ruleStore = ruleStore
         self.stageManagerSystemStateProvider = stageManagerSystemStateProvider
         self.stageManagerGroupingProvider = stageManagerGroupingProvider
         self.screenVisibilityProvider = screenVisibilityProvider
+        self.minimizedWindowProvider = minimizedWindowProvider
+        minimizedWindowProtectionStatus = StageManagerAccessibility.isTrusted
+            ? .active
+            : .permissionRequired
         let savedLanguagePreference = UserDefaults.standard.string(
             forKey: Keys.languagePreference
         ).flatMap(AppLanguagePreference.init(rawValue:)) ?? .system
@@ -532,6 +622,54 @@ final class AppModel: ObservableObject {
         )
     }
 
+    func canDeferAutomation(for item: CatalogAppItem) -> Bool {
+        let hasUncancelableQuit = item.runningInstances.contains { instance in
+            quitRequestStates[instance.id] != nil ||
+                forceQuitOperationTokens[instance.id] != nil
+        }
+        return AppAutomationDeferralEligibilityPolicy.canDefer(
+            isRunning: item.isRunning,
+            actionIsAutomated: effectivePolicy(for: item.bundleIdentifier).isAutomated,
+            hasUncancelableQuit: hasUncancelableQuit
+        )
+    }
+
+    func isAutomationDeferred(for item: CatalogAppItem) -> Bool {
+        appAutomationDeferralRegistry.isDeferred(
+            for: item.bundleIdentifier,
+            at: effectiveNow
+        )
+    }
+
+    func deferAutomation(
+        for item: CatalogAppItem,
+        duration: AppAutomationDeferralDuration
+    ) {
+        guard canDeferAutomation(for: item) else { return }
+        var nextRegistry = appAutomationDeferralRegistry
+        nextRegistry.deferAutomation(
+            for: item.bundleIdentifier,
+            duration: duration,
+            at: effectiveNow
+        )
+        appAutomationDeferralRegistry = nextRegistry
+    }
+
+    func endAutomationDeferral(for item: CatalogAppItem) {
+        var nextRegistry = appAutomationDeferralRegistry
+        guard let reset = nextRegistry.endDeferral(
+            for: item.bundleIdentifier,
+            at: effectiveNow
+        ) else {
+            return
+        }
+        appAutomationDeferralRegistry = nextRegistry
+        resetAutomaticRuntimeState(
+            bundleIdentifier: reset.bundleIdentifier,
+            restartAt: reset.timerRestartAt
+        )
+    }
+
     func setPolicy(_ action: AutoAction, for bundleIdentifier: String) {
         guard isRuleRegistryWritable else {
             statusMessage = "规则来自更高版本，当前版本无法解析或修改"
@@ -553,6 +691,15 @@ final class AppModel: ObservableObject {
                     ?? AppRuleRegistry.fallbackDisplayName(for: bundleIdentifier),
                 lastKnownAppPath: catalogItem?.bundleURL?.path
             )
+        }
+        if !effectivePolicy(for: bundleIdentifier).isAutomated {
+            var nextRegistry = appAutomationDeferralRegistry
+            if nextRegistry.endDeferral(
+                for: bundleIdentifier,
+                at: effectiveNow
+            ) != nil {
+                appAutomationDeferralRegistry = nextRegistry
+            }
         }
         persistRuleRegistry()
         resetRuntimeState(
@@ -595,6 +742,19 @@ final class AppModel: ObservableObject {
         guard defaultHideEnabled != enabled else { return }
         defaultHideEnabled = enabled
         defaults.set(enabled, forKey: Keys.defaultHideEnabled)
+        if !enabled {
+            let inheritedBundleIdentifiers = Set(
+                apps.lazy
+                    .map(\.bundleIdentifier)
+                    .filter { self.policy(for: $0) == .unset }
+            )
+            var nextRegistry = appAutomationDeferralRegistry
+            if nextRegistry.removeDeferrals(
+                for: inheritedBundleIdentifiers
+            ) {
+                appAutomationDeferralRegistry = nextRegistry
+            }
+        }
         resetDefaultPolicyRuntimeState(restartTimer: enabled)
         statusMessage = enabled
             ? "未单独设置的 App 将在离开前台后自动隐藏"
@@ -685,6 +845,11 @@ final class AppModel: ObservableObject {
         automaticWindowProtectionSettingsDidChange()
     }
 
+    func requestMinimizedWindowProtectionPermission() {
+        minimizedWindowProtectionStatus = .permissionRequired
+        StageManagerAccessibility.requestPermission()
+    }
+
     var stageManagerGroupProtectionNeedsPermission: Bool {
         stageManagerGroupProtectionStatus == .permissionRequired
     }
@@ -714,7 +879,10 @@ final class AppModel: ObservableObject {
         )
 
         if forceQuitOperationTokens[runtimeID] != nil {
-            return AppAutomationStatus(text: localized(.statusForceQuitInProgress))
+            return AppAutomationStatus(
+                text: localized(.statusForceQuitInProgress),
+                isOperationInProgress: true
+            )
         }
         if forceQuitFailures.contains(runtimeID) {
             return AppAutomationStatus(
@@ -731,6 +899,7 @@ final class AppModel: ObservableObject {
             case .waiting:
                 return AppAutomationStatus(
                     text: localized(.statusQuitInProgress),
+                    isOperationInProgress: true,
                     helpText: localized(.statusQuitWaitingHelp)
                 )
             case .timedOut:
@@ -745,22 +914,18 @@ final class AppModel: ObservableObject {
         if let oneShotAction = oneShotActionStates[runtimeID]?.action {
             switch oneShotAction {
             case .hide:
-                if hidePresentation == .completed {
-                    return AppAutomationStatus(
-                        text: localized(.statusHideHidden),
-                        isError: false
-                    )
-                }
                 if hidePresentation == .inProgress {
                     return AppAutomationStatus(
                         text: localized(.statusHideInProgress),
-                        isError: false
+                        isError: false,
+                        isOperationInProgress: true
                     )
                 }
             case .quit:
                 return AppAutomationStatus(
                     text: localized(.statusQuitRequestedWaiting),
-                    isError: false
+                    isError: false,
+                    isOperationInProgress: true
                 )
             case .unset, .ignore:
                 break
@@ -768,7 +933,34 @@ final class AppModel: ObservableObject {
         }
 
         let action = effectivePolicy(for: bundleID)
-        guard action.isAutomated else { return nil }
+        guard action.isAutomated else {
+            if oneShotActionStates[runtimeID]?.action == .hide,
+               hidePresentation == .completed {
+                return AppAutomationStatus(
+                    text: localized(.statusHideHidden),
+                    isError: false
+                )
+            }
+            return nil
+        }
+
+        if item.isProtectedByParallelsVM {
+            let vmUseCanBeVerified =
+                item.parallelsVMProcessState != .unavailable
+            return AppAutomationStatus(
+                text: localized(
+                    vmUseCanBeVerified
+                        ? .statusParallelsVMInUse
+                        : .statusParallelsVMUnavailable
+                ),
+                isProtected: true,
+                helpText: localized(
+                    vmUseCanBeVerified
+                        ? .statusParallelsVMInUseHelp
+                        : .statusParallelsVMUnavailableHelp
+                )
+            )
+        }
 
         if let failedAction = actionFailures[runtimeID] {
             let key: L10n.Key = retryStates[runtimeID]?.hasAttemptsRemaining == true
@@ -782,22 +974,50 @@ final class AppModel: ObservableObject {
             )
         }
         if action == .hide {
-            if hidePresentation == .completed {
-                return AppAutomationStatus(
-                    text: localized(.statusHideHidden),
-                    isError: false
-                )
-            }
             if hidePresentation == .inProgress {
                 return AppAutomationStatus(
                     text: localized(.statusHideInProgress),
-                    isError: false
+                    isError: false,
+                    isOperationInProgress: true
                 )
             }
         }
         if action == .quit, alreadyHandled.contains(runtimeID) {
             return AppAutomationStatus(
                 text: localized(.statusQuitRequestedWaiting),
+                isError: false,
+                isOperationInProgress: true
+            )
+        }
+        let remainingDeferral = appAutomationDeferralRegistry.remainingTime(
+            for: bundleID,
+            at: effectiveNow
+        )
+        let hasHigherPriorityStatus =
+            actionOperationTokens[runtimeID] != nil ||
+            quitRequestStates[runtimeID] != nil ||
+            forceQuitOperationTokens[runtimeID] != nil ||
+            actionFailures[runtimeID] != nil
+        if AppAutomationStatus.shouldPresentDeferralInsteadOfCompletedHide(
+            isDeferred: remainingDeferral != nil,
+            hasHigherPriorityStatus: hasHigherPriorityStatus
+        ), let remaining = remainingDeferral {
+            return AppAutomationStatus(
+                text: localized(.statusAppDeferralActive, replacements: [
+                    "time": formatRemainingTime(remaining)
+                ]),
+                isProtected: true,
+                isDeferred: true,
+                helpText: localized(.statusAppDeferralHelp)
+            )
+        }
+        if AppAutomationStatus.shouldPresentCompletedHide(
+            automaticAction: action,
+            oneShotAction: oneShotActionStates[runtimeID]?.action,
+            hideIsCompleted: hidePresentation == .completed
+        ) {
+            return AppAutomationStatus(
+                text: localized(.statusHideHidden),
                 isError: false
             )
         }
@@ -808,9 +1028,17 @@ final class AppModel: ObservableObject {
             stageManagerHoldReasons:
                 stageManagerHoldReasonsByBundleIdentifier[bundleID] ?? []
         ) {
-            let statusKey: L10n.Key = protectedStatus == .inUse
-                ? .statusInUse
-                : .statusStageManagerGroupProtected
+            let statusKey: L10n.Key
+            switch protectedStatus {
+            case .inUse:
+                statusKey = .statusInUse
+            case .stageManagerGroupProtected:
+                statusKey = .statusStageManagerGroupProtected
+            case .screenVisibilityProtected:
+                statusKey = .statusScreenVisibilityProtected
+            case .stageManagerForegroundGroupProtected:
+                statusKey = .statusStageManagerForegroundGroupProtected
+            }
             return AppAutomationStatus(
                 text: localized(statusKey),
                 isProtected: true
@@ -828,6 +1056,28 @@ final class AppModel: ObservableObject {
             return AppAutomationStatus(
                 text: localized(statusKey),
                 isError: false
+            )
+        }
+        if item.hasVisibleWindowOnAnotherSpace {
+            return AppAutomationStatus(
+                text: localized(.statusOtherDesktopWindow),
+                isProtected: true,
+                helpText: localized(.statusOtherDesktopWindowHelp)
+            )
+        }
+        if ApplicationMinimizedWindowProtectionPolicy
+            .shouldHoldQuitCountdown(
+                action: action,
+                hasMinimizedWindow: item.hasMinimizedWindow,
+                windowStateIsUnavailable:
+                    item.minimizedWindowStateIsUnavailable
+            ) {
+            let key: L10n.Key = item.minimizedWindowStateIsUnavailable
+                ? .statusMinimizedWindowUnavailable
+                : .statusMinimizedWindowProtected
+            return AppAutomationStatus(
+                text: localized(key),
+                isProtected: true
             )
         }
         if item.isActive {
@@ -1135,12 +1385,42 @@ final class AppModel: ObservableObject {
 
     func refreshApps() {
         let ownBundleID = Bundle.main.bundleIdentifier
-        let runningApplications = NSWorkspace.shared.runningApplications
+        let parallelsProcessSnapshot =
+            SystemParallelsVirtualMachineProcessProvider.snapshot()
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let frontmostProcessIdentifier =
+            frontmostApplication?.processIdentifier
+        let processesWithVisibleWindowsOnInactiveSpaces =
+            ApplicationInactiveSpaceVisibilityProvider
+            .processIdentifiersWithVisibleWindowsOnInactiveSpaces()
+        let workspaceRunningApplications = NSWorkspace.shared.runningApplications
+        let runningApplications = workspaceRunningApplications
             .filter { app in
                 app.activationPolicy == .regular &&
                 app.bundleIdentifier != ownBundleID &&
                 app.localizedName != nil
             }
+        let runningSharedApplicationProcessIdentifiers =
+            sharedWindowsApplicationProcessIdentifiers(
+                processSnapshot: parallelsProcessSnapshot,
+                workspaceApplications: workspaceRunningApplications,
+                frontmostApplication: frontmostApplication
+            )
+        switch parallelsDesktopStopCleanupTracker.observe(
+            parallelsProcessSnapshot.state
+        ) {
+        case .schedule, .retry:
+            scheduleParallelsDesktopQuitAfterVMStops()
+        case .cancel:
+            pendingParallelsDesktopQuitAfterVMStopToken = nil
+        case .none, .quit:
+            break
+        }
+        let parallelsVirtualMachineIsInUse =
+            ParallelsVirtualMachineProtectionPolicy.virtualMachineIsInUse(
+                runningSharedApplicationProcessIdentifiers:
+                    runningSharedApplicationProcessIdentifiers
+            )
         let running = runningApplications
             .compactMap { app -> RunningAppItem? in
                 guard let bundleID = app.bundleIdentifier,
@@ -1153,7 +1433,35 @@ final class AppModel: ObservableObject {
                     name: name,
                     icon: icon,
                     isHidden: app.isHidden,
-                    isActive: app.isActive,
+                    isActive: ApplicationForegroundPolicy.isActive(
+                        processIdentifier: app.processIdentifier,
+                        frontmostProcessIdentifier:
+                            frontmostProcessIdentifier
+                    ),
+                    hasVisibleWindowOnAnotherSpace:
+                        ParallelsVirtualMachineProtectionPolicy
+                            .shouldDeferAutomaticActionForInactiveSpaceWindow(
+                                bundleIdentifier: bundleID,
+                                applicationURL: app.bundleURL,
+                                hasVisibleWindowOnAnotherSpace:
+                                    processesWithVisibleWindowsOnInactiveSpaces
+                                        .contains(app.processIdentifier)
+                            ),
+                    hasMinimizedWindow:
+                        minimizedWindowProcessIdentifiers.contains(
+                            app.processIdentifier
+                        ),
+                    minimizedWindowStateIsUnavailable:
+                        unavailableMinimizedWindowProcessIdentifiers.contains(
+                            app.processIdentifier
+                        ),
+                    parallelsVMProcessState: parallelsProcessSnapshot.state,
+                    parallelsVirtualMachineIsInUse:
+                        parallelsVirtualMachineIsInUse,
+                    isParallelsVirtualMachineProcess:
+                        parallelsProcessSnapshot.processIdentifiers.contains(
+                            Int32(app.processIdentifier)
+                        ),
                     app: app
                 )
             }
@@ -1162,7 +1470,35 @@ final class AppModel: ObservableObject {
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
 
+        let previousParallelsProtection = Set(
+            apps.filter(\.isProtectedByParallelsVM).map(\.bundleIdentifier)
+        )
+        let currentParallelsProtection = Set(
+            running.filter(\.isProtectedByParallelsVM).map(\.bundleIdentifier)
+        )
+        for bundleIdentifier in currentParallelsProtection
+            .subtracting(previousParallelsProtection) {
+            resetAutomaticRuntimeState(
+                bundleIdentifier: bundleIdentifier,
+                restartAt: nil
+            )
+        }
+        for bundleIdentifier in previousParallelsProtection
+            .subtracting(currentParallelsProtection) {
+            resetAutomaticRuntimeState(
+                bundleIdentifier: bundleIdentifier,
+                restartAt: effectiveNow
+            )
+        }
+
         let runningRuntimeIDs = Set(running.map(\.id))
+        let runningBundleIdentifiers = Set(running.map(\.bundleIdentifier))
+        var nextDeferralRegistry = appAutomationDeferralRegistry
+        if nextDeferralRegistry.removeStoppedApps(
+            runningBundleIdentifiers: runningBundleIdentifiers
+        ) {
+            appAutomationDeferralRegistry = nextDeferralRegistry
+        }
         let observationInstant = automationClock.now
         for item in running {
             let action = effectivePolicy(for: item.bundleIdentifier)
@@ -1253,7 +1589,16 @@ final class AppModel: ObservableObject {
                 applicationIsActive: item.isActive,
                 applicationIsHeld: automaticallyProtectedBundleIdentifiers.contains(
                     item.bundleIdentifier
-                ),
+                ) || item.isProtectedByParallelsVM ||
+                    ApplicationMinimizedWindowProtectionPolicy
+                    .shouldHoldQuitCountdown(
+                        action: action,
+                        hasMinimizedWindow: item.hasMinimizedWindow,
+                        windowStateIsUnavailable:
+                            item.minimizedWindowStateIsUnavailable
+                    ),
+                applicationHasVisibleWindowOnAnotherSpace:
+                    item.hasVisibleWindowOnAnotherSpace,
                 hasTimer: inactiveSince[item.id] != nil
             )
             switch timerDirective {
@@ -1286,6 +1631,193 @@ final class AppModel: ObservableObject {
         rebuildCatalog()
     }
 
+    private func refreshMinimizedWindowProtection() async {
+        let processIdentifiers = Set(apps.compactMap { item -> pid_t? in
+            guard effectivePolicy(for: item.bundleIdentifier) == .quit,
+                  !item.isActive,
+                  !item.hasVisibleWindowOnAnotherSpace,
+                  !item.isProtectedByParallelsVM,
+                  !automaticallyProtectedBundleIdentifiers.contains(
+                    item.bundleIdentifier
+                  ) else {
+                return nil
+            }
+            return item.processIdentifier
+        })
+
+        guard !processIdentifiers.isEmpty else {
+            minimizedWindowProcessIdentifiers = []
+            unavailableMinimizedWindowProcessIdentifiers = []
+            let status: ApplicationMinimizedWindowProtectionStatus =
+                StageManagerAccessibility.isTrusted
+                ? .active
+                : .permissionRequired
+            if minimizedWindowProtectionStatus != status {
+                minimizedWindowProtectionStatus = status
+            }
+            return
+        }
+
+        let snapshot = await minimizedWindowProvider.readSnapshot(
+            processIdentifiers: processIdentifiers
+        )
+        let runningProcessIdentifiers = Set(
+            NSWorkspace.shared.runningApplications.map(\.processIdentifier)
+        )
+        minimizedWindowProcessIdentifiers = snapshot
+            .minimizedProcessIdentifiers
+            .intersection(runningProcessIdentifiers)
+        unavailableMinimizedWindowProcessIdentifiers = snapshot
+            .unavailableProcessIdentifiers
+            .intersection(runningProcessIdentifiers)
+        if minimizedWindowProtectionStatus != snapshot.status {
+            minimizedWindowProtectionStatus = snapshot.status
+        }
+    }
+
+    private func refreshMinimizedWindowProtection(
+        for processIdentifier: pid_t
+    ) async {
+        let snapshot = await minimizedWindowProvider.readSnapshot(
+            processIdentifiers: [processIdentifier]
+        )
+        let isStillRunning = NSWorkspace.shared.runningApplications.contains {
+            $0.processIdentifier == processIdentifier
+        }
+        guard isStillRunning else { return }
+
+        minimizedWindowProcessIdentifiers.remove(processIdentifier)
+        unavailableMinimizedWindowProcessIdentifiers.remove(processIdentifier)
+        minimizedWindowProcessIdentifiers.formUnion(
+            snapshot.minimizedProcessIdentifiers
+        )
+        unavailableMinimizedWindowProcessIdentifiers.formUnion(
+            snapshot.unavailableProcessIdentifiers
+        )
+
+        let status: ApplicationMinimizedWindowProtectionStatus
+        if snapshot.status == .permissionRequired {
+            status = .permissionRequired
+        } else if !unavailableMinimizedWindowProcessIdentifiers.isEmpty {
+            status = .unavailable
+        } else {
+            status = .active
+        }
+        if minimizedWindowProtectionStatus != status {
+            minimizedWindowProtectionStatus = status
+        }
+        refreshApps()
+    }
+
+    private func sharedWindowsApplicationProcessIdentifiers(
+        processSnapshot: ParallelsVirtualMachineProcessSnapshot,
+        workspaceApplications: [NSRunningApplication],
+        frontmostApplication: NSRunningApplication?
+    ) -> Set<Int32> {
+        var processIdentifiers =
+            processSnapshot.sharedApplicationProcessIdentifiers
+        processIdentifiers.formUnion(
+            workspaceApplications.filter {
+                ParallelsVirtualMachineProtectionPolicy
+                    .isVirtualMachineApplication(
+                        bundleIdentifier: $0.bundleIdentifier,
+                        applicationURL: $0.bundleURL
+                    )
+            }.map(\.processIdentifier)
+        )
+        if let frontmostApplication,
+           ParallelsVirtualMachineProtectionPolicy
+                .isVirtualMachineApplication(
+                    bundleIdentifier: frontmostApplication.bundleIdentifier,
+                    applicationURL: frontmostApplication.bundleURL
+                ) {
+            processIdentifiers.insert(frontmostApplication.processIdentifier)
+        }
+        return processIdentifiers
+    }
+
+    private func scheduleParallelsDesktopQuitAfterVMStops() {
+        guard automationEnabled,
+              workspaceSessionIsActive,
+              pendingParallelsDesktopQuitAfterVMStopToken == nil else {
+            return
+        }
+
+        let token = UUID()
+        pendingParallelsDesktopQuitAfterVMStopToken = token
+        scheduleParallelsDesktopQuitAfterVMStopVerification(token: token)
+    }
+
+    private func scheduleParallelsDesktopQuitAfterVMStopVerification(
+        token: UUID
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self,
+                  self.pendingParallelsDesktopQuitAfterVMStopToken == token else {
+                return
+            }
+            guard self.automationEnabled, self.workspaceSessionIsActive else {
+                self.pendingParallelsDesktopQuitAfterVMStopToken = nil
+                return
+            }
+
+            let latestSnapshot =
+                SystemParallelsVirtualMachineProcessProvider.snapshot()
+            let workspaceApplications = NSWorkspace.shared.runningApplications
+            let sharedApplicationProcessIdentifiers =
+                self.sharedWindowsApplicationProcessIdentifiers(
+                    processSnapshot: latestSnapshot,
+                    workspaceApplications: workspaceApplications,
+                    frontmostApplication:
+                        NSWorkspace.shared.frontmostApplication
+                )
+            let decision = self.parallelsDesktopStopCleanupTracker.verify(
+                processState: latestSnapshot.state,
+                runningSharedApplicationProcessIdentifiers:
+                    sharedApplicationProcessIdentifiers
+            )
+            switch decision {
+            case .retry, .schedule:
+                self.scheduleParallelsDesktopQuitAfterVMStopVerification(
+                    token: token
+                )
+                return
+            case .cancel, .none:
+                self.pendingParallelsDesktopQuitAfterVMStopToken = nil
+                return
+            case .quit:
+                self.pendingParallelsDesktopQuitAfterVMStopToken = nil
+            }
+
+            let dockHelpers = workspaceApplications.filter {
+                ParallelsVirtualMachineProtectionPolicy.isWindowsDockHelper(
+                    bundleIdentifier: $0.bundleIdentifier,
+                    applicationURL: $0.bundleURL
+                )
+            }
+            for dockHelper in dockHelpers where !dockHelper.isTerminated {
+                _ = dockHelper.terminate()
+            }
+            guard let parallelsDesktop = workspaceApplications.first(where: {
+                ParallelsVirtualMachineProtectionPolicy.isParallelsDesktop(
+                    bundleIdentifier: $0.bundleIdentifier ?? "",
+                    applicationURL: $0.bundleURL
+                )
+            }) else {
+                return
+            }
+            if parallelsDesktop.terminate() {
+                Self.logger.notice(
+                    "Requested Parallels Desktop to quit after its VM stopped"
+                )
+            } else {
+                Self.logger.error(
+                    "Parallels Desktop did not accept a normal quit request after its VM stopped"
+                )
+            }
+        }
+    }
+
     private func clearCompletedHideStateAfterObservedUnhide(
         for item: RunningAppItem,
         at eventInstant: TimeInterval
@@ -1305,6 +1837,14 @@ final class AppModel: ObservableObject {
             applicationIsHeld:
                 automaticallyProtectedBundleIdentifiers.contains(
                     item.bundleIdentifier
+                ) || item.hasVisibleWindowOnAnotherSpace ||
+                item.isProtectedByParallelsVM ||
+                ApplicationMinimizedWindowProtectionPolicy
+                .shouldHoldQuitCountdown(
+                    action: effectivePolicy(for: item.bundleIdentifier),
+                    hasMinimizedWindow: item.hasMinimizedWindow,
+                    windowStateIsUnavailable:
+                        item.minimizedWindowStateIsUnavailable
                 )
         )
         if shouldRestartTimer {
@@ -1707,7 +2247,19 @@ final class AppModel: ObservableObject {
                 let runtimeID = self.runtimeIdentifier(for: app)
                 if self.shouldTrackIdleTime(
                     bundleIdentifier: bundleID,
-                    isActive: app.isActive
+                    isActive: app.isActive,
+                    hasVisibleWindowOnAnotherSpace:
+                        self.apps.first(where: { $0.id == runtimeID })?
+                            .hasVisibleWindowOnAnotherSpace ?? false,
+                    isProtectedByParallelsVM:
+                        self.apps.first(where: { $0.id == runtimeID })?
+                            .isProtectedByParallelsVM ?? false,
+                    hasMinimizedWindow:
+                        self.apps.first(where: { $0.id == runtimeID })?
+                            .hasMinimizedWindow ?? false,
+                    minimizedWindowStateIsUnavailable:
+                        self.apps.first(where: { $0.id == runtimeID })?
+                            .minimizedWindowStateIsUnavailable ?? false
                 ) {
                     self.inactiveSince[runtimeID] = self.effectiveNow
                 }
@@ -1860,23 +2412,39 @@ final class AppModel: ObservableObject {
 
     private func checkIdleApps() async {
         refreshApps()
+        await refreshMinimizedWindowProtection()
+        refreshApps()
         guard workspaceSessionIsActive else { return }
         guard await refreshAutomaticWindowProtection() else { return }
         guard automationEnabled else { return }
 
         let now = effectiveNow
+        expireAutomationDeferrals(at: now)
 
         for item in apps {
             let bundleID = item.bundleIdentifier
             let runtimeID = item.id
             let action = effectivePolicy(for: bundleID)
             guard action.isAutomated,
+                  !appAutomationDeferralRegistry.isDeferred(
+                    for: bundleID,
+                    at: now
+                  ),
                   actionOperationTokens[runtimeID] == nil,
                   oneShotActionStates[runtimeID] == nil,
                   quitRequestStates[runtimeID] == nil,
                   forceQuitOperationTokens[runtimeID] == nil,
                   !automaticallyProtectedBundleIdentifiers.contains(bundleID),
+                  !item.isProtectedByParallelsVM,
                   !item.isActive,
+                  !item.hasVisibleWindowOnAnotherSpace,
+                  !ApplicationMinimizedWindowProtectionPolicy
+                    .shouldHoldQuitCountdown(
+                        action: action,
+                        hasMinimizedWindow: item.hasMinimizedWindow,
+                        windowStateIsUnavailable:
+                            item.minimizedWindowStateIsUnavailable
+                    ),
                   let inactiveAt = inactiveSince[runtimeID] else { continue }
 
             let elapsed = now - inactiveAt
@@ -1899,13 +2467,46 @@ final class AppModel: ObservableObject {
                     continue
                 case .preHide:
                     guard !alreadyHandled.contains(runtimeID) else { continue }
+                    let validationDeferralRevision =
+                        appAutomationDeferralRegistry.revision(for: bundleID)
                     guard await validateAcceptedScreenVisibilityFingerprint()
                     else {
                         return
                     }
+                    await refreshMinimizedWindowProtection(
+                        for: item.processIdentifier
+                    )
+                    let validationNow = effectiveNow
+                    expireAutomationDeferrals(at: validationNow)
+                    let currentlyEligibleItem =
+                        currentlyEligibleAutomaticItem(
+                            action,
+                            on: item,
+                            stage: .preQuitHide,
+                            at: validationNow
+                        )
+                    guard AppAutomationActionValidationPolicy.shouldProceed(
+                        deferralStateChanged:
+                            appAutomationDeferralRegistry.revision(
+                                for: bundleID
+                            ) !=
+                                validationDeferralRevision,
+                        isDeferredNow:
+                            appAutomationDeferralRegistry.isDeferred(
+                                for: bundleID,
+                                at: validationNow
+                            ),
+                        isStillIdleEligible: currentlyEligibleItem != nil
+                    ), let currentlyEligibleItem else {
+                        continue
+                    }
                     let actionProtectionMode =
                         activeAutomaticWindowProtectionMode
-                    performPreQuitHide(on: item, state: preHideState)
+                    performPreQuitHide(
+                        on: currentlyEligibleItem,
+                        state: preQuitHideStates[runtimeID]
+                            ?? PreQuitHideRuntimeState()
+                    )
                     if AutomaticWindowProtectionInteractionPolicy
                         .requiresFreshSnapshotAfterAutomaticAction(
                             activeMode: actionProtectionMode
@@ -1915,7 +2516,6 @@ final class AppModel: ObservableObject {
                     }
                     continue
                 case .quit:
-                    preQuitHideStates.removeValue(forKey: runtimeID)
                     let isFirstDeadlineAttempt = !quitDeadlineAttempted.contains(runtimeID)
                     guard QuitAutomationTiming.shouldAttemptQuit(
                         isFirstDeadlineAttempt: isFirstDeadlineAttempt,
@@ -1925,14 +2525,6 @@ final class AppModel: ObservableObject {
                     ) else {
                         continue
                     }
-                    if isFirstDeadlineAttempt {
-                        // A failed manual batch request before Q must not delay or
-                        // consume retries from the rule's first deadline attempt.
-                        alreadyHandled.remove(runtimeID)
-                        actionFailures.removeValue(forKey: runtimeID)
-                        retryStates.removeValue(forKey: runtimeID)
-                    }
-                    quitDeadlineAttempted.insert(runtimeID)
                 }
             } else {
                 guard AutomaticHideAttemptPolicy.shouldAttempt(
@@ -1947,14 +2539,56 @@ final class AppModel: ObservableObject {
                 ) else { continue }
             }
 
+            let validationDeferralRevision = appAutomationDeferralRegistry
+                .revision(for: bundleID)
             guard await validateAcceptedScreenVisibilityFingerprint() else {
                 return
+            }
+            if action == .quit {
+                await refreshMinimizedWindowProtection(
+                    for: item.processIdentifier
+                )
+            }
+            let validationNow = effectiveNow
+            expireAutomationDeferrals(at: validationNow)
+            let currentlyEligibleItem = currentlyEligibleAutomaticItem(
+                action,
+                on: item,
+                stage: .finalAction,
+                at: validationNow
+            )
+            guard AppAutomationActionValidationPolicy.shouldProceed(
+                deferralStateChanged:
+                    appAutomationDeferralRegistry.revision(
+                        for: bundleID
+                    ) !=
+                        validationDeferralRevision,
+                isDeferredNow: appAutomationDeferralRegistry.isDeferred(
+                    for: bundleID,
+                    at: validationNow
+                ),
+                isStillIdleEligible: currentlyEligibleItem != nil
+            ), let currentlyEligibleItem else {
+                continue
+            }
+            if action == .quit {
+                preQuitHideStates.removeValue(forKey: runtimeID)
+                let isFirstDeadlineAttempt =
+                    !quitDeadlineAttempted.contains(runtimeID)
+                if isFirstDeadlineAttempt {
+                    // A failed manual batch request before Q must not delay or
+                    // consume retries from the rule's first deadline attempt.
+                    alreadyHandled.remove(runtimeID)
+                    actionFailures.removeValue(forKey: runtimeID)
+                    retryStates.removeValue(forKey: runtimeID)
+                }
+                quitDeadlineAttempted.insert(runtimeID)
             }
             let actionProtectionMode = activeAutomaticWindowProtectionMode
             perform(
                 action,
-                on: item.app,
-                named: item.name,
+                on: currentlyEligibleItem.app,
+                named: currentlyEligibleItem.name,
                 bundleIdentifier: bundleID,
                 runtimeIdentifier: runtimeID,
                 source: .automatic
@@ -1967,6 +2601,118 @@ final class AppModel: ObservableObject {
                 return
             }
         }
+    }
+
+    private func expireAutomationDeferrals(
+        at instant: TimeInterval
+    ) {
+        var nextRegistry = appAutomationDeferralRegistry
+        let expiredDeferrals = nextRegistry.expire(at: instant)
+        guard !expiredDeferrals.isEmpty else { return }
+
+        appAutomationDeferralRegistry = nextRegistry
+        for reset in expiredDeferrals {
+            resetAutomaticRuntimeState(
+                bundleIdentifier: reset.bundleIdentifier,
+                restartAt: reset.timerRestartAt
+            )
+        }
+    }
+
+    private func currentlyEligibleAutomaticItem(
+        _ action: AutoAction,
+        on item: RunningAppItem,
+        stage: AutomaticActionValidationStage,
+        at now: TimeInterval
+    ) -> RunningAppItem? {
+        let bundleID = item.bundleIdentifier
+        let runtimeID = item.id
+        guard automationEnabled,
+              workspaceSessionIsActive,
+              effectivePolicy(for: bundleID) == action,
+              action.isAutomated,
+              actionOperationTokens[runtimeID] == nil,
+              oneShotActionStates[runtimeID] == nil,
+              quitRequestStates[runtimeID] == nil,
+              forceQuitOperationTokens[runtimeID] == nil,
+              !automaticallyProtectedBundleIdentifiers.contains(bundleID),
+              let currentItem = apps.first(where: { $0.id == runtimeID }),
+              !currentItem.isProtectedByParallelsVM,
+              !currentItem.isActive,
+              !currentItem.hasVisibleWindowOnAnotherSpace,
+              !ApplicationMinimizedWindowProtectionPolicy
+                .shouldHoldQuitCountdown(
+                    action: action,
+                    hasMinimizedWindow: currentItem.hasMinimizedWindow,
+                    windowStateIsUnavailable:
+                        currentItem.minimizedWindowStateIsUnavailable
+                ),
+              let inactiveAt = inactiveSince[runtimeID] else {
+            return nil
+        }
+
+        let elapsed = now - inactiveAt
+        let actionDelay = thresholdSeconds(for: bundleID)
+        guard AppAutomationActionValidationPolicy
+            .hasReachedRequiredTimingThreshold(
+                isPreQuitHide: stage == .preQuitHide,
+                elapsed: elapsed,
+                actionDelay: actionDelay
+            ) else {
+            return nil
+        }
+
+        switch action {
+        case .hide:
+            guard stage == .finalAction,
+                  AutomaticHideAttemptPolicy.shouldAttempt(
+                    hasConfirmedCompletion:
+                        hideCompletionStates[runtimeID] != nil,
+                    isAlreadyHandled: alreadyHandled.contains(runtimeID),
+                    canRetry:
+                        retryStates[runtimeID]?.canAttempt(at: now) != false,
+                    elapsed: elapsed,
+                    actionDelay: actionDelay
+                  ) else {
+                return nil
+            }
+        case .quit:
+            let preHideState = preQuitHideStates[runtimeID]
+                ?? PreQuitHideRuntimeState()
+            let decision = QuitAutomationTiming.decision(
+                enabled: preQuitHideEnabled,
+                elapsed: elapsed,
+                hideDelay: preQuitHideDelaySeconds,
+                quitDelay: actionDelay,
+                isHidden: currentItem.isHidden,
+                hideStage: preHideState.stage,
+                canAttemptHide: preHideState.retryState.canAttempt(at: now)
+            )
+            switch stage {
+            case .preQuitHide:
+                guard decision == .preHide,
+                      !alreadyHandled.contains(runtimeID) else {
+                    return nil
+                }
+            case .finalAction:
+                let isFirstDeadlineAttempt =
+                    !quitDeadlineAttempted.contains(runtimeID)
+                guard decision == .quit,
+                      QuitAutomationTiming.shouldAttemptQuit(
+                        isFirstDeadlineAttempt: isFirstDeadlineAttempt,
+                        isAlreadyHandled: alreadyHandled.contains(runtimeID),
+                        hasActionFailure: actionFailures[runtimeID] != nil,
+                        canRetry:
+                            retryStates[runtimeID]?.canAttempt(at: now) != false
+                      ) else {
+                    return nil
+                }
+            }
+        case .unset, .ignore:
+            return nil
+        }
+
+        return currentItem
     }
 
     private func validateAcceptedScreenVisibilityFingerprint() async -> Bool {
@@ -2099,6 +2845,16 @@ final class AppModel: ObservableObject {
         if source.isAutomatic,
            !automaticWindowProtectionModeMatchesCurrentSystemState() {
             failClosedForWindowProtectionChange()
+            return
+        }
+        if source.isAutomatic,
+           apps.first(where: { $0.id == runtimeIdentifier })?
+                .isProtectedByParallelsVM == true {
+            resetAutomaticRuntimeState(
+                bundleIdentifier: bundleIdentifier,
+                restartAt: nil
+            )
+            refreshApps()
             return
         }
         guard StageManagerAutomaticActionPolicy.shouldAllow(
@@ -2363,10 +3119,24 @@ final class AppModel: ObservableObject {
 
     private func shouldTrackIdleTime(
         bundleIdentifier: String,
-        isActive: Bool
+        isActive: Bool,
+        hasVisibleWindowOnAnotherSpace: Bool = false,
+        isProtectedByParallelsVM: Bool = false,
+        hasMinimizedWindow: Bool = false,
+        minimizedWindowStateIsUnavailable: Bool = false
     ) -> Bool {
-        effectivePolicy(for: bundleIdentifier).isAutomated &&
+        let action = effectivePolicy(for: bundleIdentifier)
+        return action.isAutomated &&
             !isActive &&
+            !hasVisibleWindowOnAnotherSpace &&
+            !isProtectedByParallelsVM &&
+            !ApplicationMinimizedWindowProtectionPolicy
+                .shouldHoldQuitCountdown(
+                    action: action,
+                    hasMinimizedWindow: hasMinimizedWindow,
+                    windowStateIsUnavailable:
+                        minimizedWindowStateIsUnavailable
+                ) &&
             !automaticallyProtectedBundleIdentifiers.contains(bundleIdentifier)
     }
 
@@ -2896,15 +3666,15 @@ final class AppModel: ObservableObject {
             transition.protectedBundleIdentifiers
 
         for bundleIdentifier in transition.enteredProtection {
-            clearAutomaticRuntimeStateForWindowProtection(
+            resetAutomaticRuntimeState(
                 bundleIdentifier: bundleIdentifier,
-                restartTimer: false
+                restartAt: nil
             )
         }
         for bundleIdentifier in transition.leftProtection {
-            clearAutomaticRuntimeStateForWindowProtection(
+            resetAutomaticRuntimeState(
                 bundleIdentifier: bundleIdentifier,
-                restartTimer: true
+                restartAt: effectiveNow
             )
         }
     }
@@ -2935,9 +3705,9 @@ final class AppModel: ObservableObject {
             nextReasonsByBundleIdentifier
     }
 
-    private func clearAutomaticRuntimeStateForWindowProtection(
+    private func resetAutomaticRuntimeState(
         bundleIdentifier: String,
-        restartTimer: Bool
+        restartAt: TimeInterval?
     ) {
         for item in apps where item.bundleIdentifier == bundleIdentifier {
             inactiveSince.removeValue(forKey: item.id)
@@ -2956,12 +3726,19 @@ final class AppModel: ObservableObject {
                 hideCompletionStates.removeValue(forKey: item.id)
             }
 
-            if restartTimer,
+            if let restartAt,
                shouldTrackIdleTime(
                    bundleIdentifier: item.bundleIdentifier,
-                   isActive: item.isActive
+                   isActive: item.isActive,
+                   hasVisibleWindowOnAnotherSpace:
+                       item.hasVisibleWindowOnAnotherSpace,
+                   isProtectedByParallelsVM:
+                       item.isProtectedByParallelsVM,
+                   hasMinimizedWindow: item.hasMinimizedWindow,
+                   minimizedWindowStateIsUnavailable:
+                       item.minimizedWindowStateIsUnavailable
                ) {
-                inactiveSince[item.id] = effectiveNow
+                inactiveSince[item.id] = restartAt
             }
         }
     }
@@ -2972,10 +3749,11 @@ final class AppModel: ObservableObject {
                 ? item.bundleIdentifier
                 : nil
         })
+        let restartAt = restartTimers ? effectiveNow : nil
         for bundleIdentifier in automatedBundleIdentifiers {
-            clearAutomaticRuntimeStateForWindowProtection(
+            resetAutomaticRuntimeState(
                 bundleIdentifier: bundleIdentifier,
-                restartTimer: restartTimers
+                restartAt: restartAt
             )
         }
     }
@@ -2997,6 +3775,9 @@ final class AppModel: ObservableObject {
             shifted.retryState.shiftRetryDate(by: suspendedDuration)
             return shifted
         }
+        var nextDeferralRegistry = appAutomationDeferralRegistry
+        nextDeferralRegistry.shiftDeadlines(by: suspendedDuration)
+        appAutomationDeferralRegistry = nextDeferralRegistry
     }
 
     private func handleApplicationUnhidden(
@@ -3017,11 +3798,24 @@ final class AppModel: ObservableObject {
         quitDeadlineAttempted.remove(runtimeIdentifier)
         preQuitHideStates.removeValue(forKey: runtimeIdentifier)
 
+        let action = effectivePolicy(for: bundleIdentifier)
+        let currentItem = apps.first(where: { $0.id == runtimeIdentifier })
         let shouldRestartTimer = ApplicationUnhidePolicy.shouldRestartTimer(
-            actionIsAutomated: effectivePolicy(for: bundleIdentifier).isAutomated,
+            actionIsAutomated: action.isAutomated,
             applicationIsActive: app.isActive,
             applicationIsHeld:
-                automaticallyProtectedBundleIdentifiers.contains(bundleIdentifier)
+                automaticallyProtectedBundleIdentifiers.contains(bundleIdentifier) ||
+                currentItem?.hasVisibleWindowOnAnotherSpace == true ||
+                currentItem?.isProtectedByParallelsVM == true ||
+                ApplicationMinimizedWindowProtectionPolicy
+                    .shouldHoldQuitCountdown(
+                        action: action,
+                        hasMinimizedWindow:
+                            currentItem?.hasMinimizedWindow == true,
+                        windowStateIsUnavailable:
+                            currentItem?
+                                .minimizedWindowStateIsUnavailable == true
+                    )
         )
         if shouldRestartTimer {
             inactiveSince[runtimeIdentifier] = timingSuspension.effectiveNow(at: eventInstant)
@@ -3047,7 +3841,14 @@ final class AppModel: ObservableObject {
             if restartTimer,
                shouldTrackIdleTime(
                    bundleIdentifier: item.bundleIdentifier,
-                   isActive: item.isActive
+                   isActive: item.isActive,
+                   hasVisibleWindowOnAnotherSpace:
+                       item.hasVisibleWindowOnAnotherSpace,
+                   isProtectedByParallelsVM:
+                       item.isProtectedByParallelsVM,
+                   hasMinimizedWindow: item.hasMinimizedWindow,
+                   minimizedWindowStateIsUnavailable:
+                       item.minimizedWindowStateIsUnavailable
                ) {
                 inactiveSince[item.id] = effectiveNow
             } else {
@@ -3088,7 +3889,14 @@ final class AppModel: ObservableObject {
             if restartTimer,
                shouldTrackIdleTime(
                    bundleIdentifier: item.bundleIdentifier,
-                   isActive: item.isActive
+                   isActive: item.isActive,
+                   hasVisibleWindowOnAnotherSpace:
+                       item.hasVisibleWindowOnAnotherSpace,
+                   isProtectedByParallelsVM:
+                       item.isProtectedByParallelsVM,
+                   hasMinimizedWindow: item.hasMinimizedWindow,
+                   minimizedWindowStateIsUnavailable:
+                       item.minimizedWindowStateIsUnavailable
                ) {
                 inactiveSince[item.id] = effectiveNow
             } else {
@@ -3271,6 +4079,16 @@ struct AppRow: View {
         ])
     }
 
+    private func deferralDurationTitleKey(
+        for duration: AppAutomationDeferralDuration
+    ) -> L10n.Key {
+        switch duration {
+        case .minutes15: return .contextDeferMinutes15
+        case .minutes30: return .contextDeferMinutes30
+        case .minutes60: return .contextDeferMinutes60
+        }
+    }
+
     private var displayStatus: AppAutomationStatus? {
         if item.runningInstances.count > 1 {
             let statuses = item.runningInstances.compactMap { model.automationStatus(for: $0) }
@@ -3297,6 +4115,44 @@ struct AppRow: View {
                     helpText: model.localized(.statusInstancesQuitNotCompletedHelp)
                 )
             }
+            if let operationCount = AppAutomationStatus
+                .operationInProgressInstanceCount(statuses) {
+                let deferredCount = AppAutomationStatus
+                    .mixedDeferredInstanceCount(
+                        statuses,
+                        totalInstances: item.runningInstances.count
+                    )
+                let key: L10n.Key = deferredCount == nil
+                    ? .statusInstancesOperationInProgress
+                    : .statusInstancesOperationInProgressWithDeferrals
+                var replacements = [
+                    "count": String(item.runningInstances.count),
+                    "operationCount": String(operationCount)
+                ]
+                if let deferredCount {
+                    replacements["deferredCount"] = String(deferredCount)
+                }
+                return AppAutomationStatus(
+                    text: model.localized(key, replacements: replacements),
+                    isDeferred: deferredCount != nil,
+                    isOperationInProgress: true,
+                    helpText: statuses.first(where: \.isOperationInProgress)?.helpText
+                )
+            }
+            if let deferredCount = AppAutomationStatus.mixedDeferredInstanceCount(
+                statuses,
+                totalInstances: item.runningInstances.count
+            ) {
+                return AppAutomationStatus(
+                    text: model.localized(.statusInstancesDeferredMixed, replacements: [
+                        "deferredCount": String(deferredCount),
+                        "count": String(item.runningInstances.count)
+                    ]),
+                    isProtected: true,
+                    isDeferred: true,
+                    helpText: statuses.first(where: \.isDeferred)?.helpText
+                )
+            }
             if statuses.count == item.runningInstances.count,
                let firstStatus = statuses.first,
                 statuses.allSatisfy({ $0.text == firstStatus.text }) {
@@ -3306,6 +4162,7 @@ struct AppRow: View {
                         "status": firstStatus.text
                     ]),
                     isProtected: statuses.allSatisfy(\.isProtected),
+                    isDeferred: statuses.allSatisfy(\.isDeferred),
                     helpText: firstStatus.helpText
                 )
             }
@@ -3331,10 +4188,13 @@ struct AppRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MenuLayout.rowSpacing) {
             Image(nsImage: item.icon)
                 .resizable()
-                .frame(width: 28, height: 28)
+                .frame(
+                    width: MenuLayout.appIconSize,
+                    height: MenuLayout.appIconSize
+                )
                 .saturation(item.isRunning ? 1 : 0)
                 .opacity(item.isRunning ? 1 : 0.48)
 
@@ -3352,7 +4212,7 @@ struct AppRow: View {
             }
             .layoutPriority(1)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 4)
 
             Picker(model.localized(.rowRuleLabel), selection: Binding(
                 get: { explicitAction },
@@ -3371,7 +4231,7 @@ struct AppRow: View {
                 }
             }
             .labelsHidden()
-            .frame(width: 116)
+            .frame(width: MenuLayout.ruleColumnWidth)
             .disabled(!model.rulesAreEditable)
             .help(model.localized(.rowRuleHelp, replacements: ["name": item.name]))
             .accessibilityLabel(model.localized(.a11yRuleForApp, replacements: [
@@ -3410,9 +4270,9 @@ struct AppRow: View {
                     .disabled(!model.rulesAreEditable)
                 }
             }
-            .frame(width: 90)
+            .frame(width: MenuLayout.delayColumnWidth)
         }
-        .frame(minHeight: 40)
+        .frame(minHeight: 36)
         .contentShape(Rectangle())
         .contextMenu {
             if item.isRunning {
@@ -3452,6 +4312,28 @@ struct AppRow: View {
                     "action": forceQuitMenuTitle,
                     "name": item.name
                 ]))
+
+                Divider()
+
+                Menu {
+                    ForEach(AppAutomationDeferralDuration.allCases, id: \.self) { duration in
+                        Button(model.localized(deferralDurationTitleKey(for: duration))) {
+                            model.deferAutomation(for: item, duration: duration)
+                        }
+                        .disabled(!model.canDeferAutomation(for: item))
+                    }
+                    if model.isAutomationDeferred(for: item) {
+                        Divider()
+                        Button(model.localized(.contextDeferEnd)) {
+                            model.endAutomationDeferral(for: item)
+                        }
+                    }
+                } label: {
+                    Label(
+                        model.localized(.contextDeferTitle),
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                }
             }
         }
     }
@@ -3575,6 +4457,37 @@ struct SettingsSheet: View {
         case .unavailable:
             return (
                 model.localized(.settingsScreenVisibilityProtectionUnavailable),
+                "exclamationmark.triangle",
+                .orange
+            )
+        }
+    }
+
+    private var minimizedWindowProtectionStatusPresentation: (
+        text: String,
+        symbol: String,
+        color: Color
+    ) {
+        switch model.minimizedWindowProtectionStatus {
+        case .active:
+            return (
+                model.localized(.settingsMinimizedWindowProtectionActive),
+                "checkmark.shield",
+                .green
+            )
+        case .permissionRequired:
+            return (
+                model.localized(
+                    .settingsMinimizedWindowProtectionPermissionRequired
+                ),
+                "lock.trianglebadge.exclamationmark",
+                .orange
+            )
+        case .unavailable:
+            return (
+                model.localized(
+                    .settingsMinimizedWindowProtectionUnavailable
+                ),
                 "exclamationmark.triangle",
                 .orange
             )
@@ -3817,6 +4730,39 @@ struct SettingsSheet: View {
                             .padding(.leading, 34)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(model.localized(
+                        .settingsMinimizedWindowProtectionTitle
+                    ))
+                        .font(.callout.weight(.medium))
+
+                    Text(model.localized(
+                        .settingsMinimizedWindowProtectionHelp
+                    ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    let presentation =
+                        minimizedWindowProtectionStatusPresentation
+                    Label(presentation.text, systemImage: presentation.symbol)
+                        .font(.caption)
+                        .foregroundStyle(presentation.color)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if model.minimizedWindowProtectionStatus ==
+                        .permissionRequired {
+                        Button(
+                            model.localized(
+                                .settingsMinimizedWindowProtectionGrantPermission
+                            )
+                        ) {
+                            model.requestMinimizedWindowProtectionPermission()
+                        }
+                        .controlSize(.small)
+                    }
+                }
             }
 
             Divider()
@@ -3874,8 +4820,8 @@ struct SettingsSheet: View {
                 .font(.caption)
             }
         }
-        .padding(24)
-        .frame(width: 480)
+        .padding(20)
+        .frame(width: MenuLayout.settingsWidth)
         .environment(\.locale, model.effectiveLocale)
         .background {
             SettingsWindowConfigurator(title: model.localized(.settingsTitle))
@@ -4241,7 +5187,7 @@ struct MenuContentView: View {
             HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("QuitHide")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                     Text(model.localized(.menuSubtitle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -4268,7 +5214,7 @@ struct MenuContentView: View {
                     Image(systemName: model.automationEnabled ? "pause.fill" : "play.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(model.automationEnabled ? Color.secondary : Color.orange)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 26, height: 26)
                         .background(
                             Color.primary.opacity(0.07),
                             in: Circle()
@@ -4295,14 +5241,15 @@ struct MenuContentView: View {
                     Image(systemName: "gearshape")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 26, height: 26)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(model.localized(.menuSettings))
                 .accessibilityLabel(model.localized(.a11ySettings))
             }
-            .padding(16)
+            .padding(.horizontal, MenuLayout.horizontalInset)
+            .padding(.vertical, 12)
 
             HStack(spacing: 4) {
                 scopeButton(
@@ -4388,7 +5335,7 @@ struct MenuContentView: View {
                     }
                 }
                 .padding(.horizontal, 8)
-                .frame(width: 190, height: 28)
+                .frame(width: MenuLayout.searchFieldWidth, height: 24)
                 .contentShape(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
                 )
@@ -4423,8 +5370,8 @@ struct MenuContentView: View {
                 )
                 .animation(.easeOut(duration: 0.12), value: isSearchFocused)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 10)
+            .padding(.horizontal, MenuLayout.horizontalInset)
+            .padding(.bottom, 8)
 
             if let updateVersion = updateController.pendingUpdateVersion {
                 VStack(alignment: .leading, spacing: 8) {
@@ -4456,8 +5403,8 @@ struct MenuContentView: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .stroke(Color.blue.opacity(0.20), lineWidth: 0.5)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                .padding(.horizontal, MenuLayout.horizontalInset)
+                .padding(.bottom, 8)
                 .fixedSize(horizontal: false, vertical: true)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -4467,7 +5414,7 @@ struct MenuContentView: View {
             if scopedApps.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "app.dashed")
-                        .font(.system(size: 34))
+                        .font(.system(size: 32))
                         .foregroundStyle(.secondary)
 
                     Text(emptyStateTitle)
@@ -4529,9 +5476,9 @@ struct MenuContentView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 5)
-                    .padding(.bottom, 9)
+                    .padding(.horizontal, MenuLayout.horizontalInset)
+                    .padding(.top, 4)
+                    .padding(.bottom, 8)
                 }
                 .frame(minHeight: 0)
                 .id(listIdentity)
@@ -4549,7 +5496,7 @@ struct MenuContentView: View {
                             Spacer()
                         }
 
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             Button {
                                 model.performConfiguredApps(.hide)
                             } label: {
@@ -4610,11 +5557,11 @@ struct MenuContentView: View {
                         .help(model.localized(.menuQuitApp))
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, MenuLayout.horizontalInset)
+                .padding(.vertical, 9)
             }
         }
-        .frame(width: 440, height: menuHeight, alignment: .top)
+        .frame(width: MenuLayout.panelWidth, height: menuHeight, alignment: .top)
         .environment(\.locale, model.effectiveLocale)
         .animation(.easeOut(duration: 0.18), value: updateController.pendingUpdateVersion)
         .allowsHitTesting(pendingForceQuitRequest == nil)
@@ -4715,8 +5662,8 @@ struct MenuContentView: View {
             ]))
                 .font(.caption.weight(isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-                .padding(.horizontal, 10)
-                .frame(height: 28)
+                .padding(.horizontal, 8)
+                .frame(height: 24)
                 .background(
                     isSelected ? Color.primary.opacity(0.09) : Color.clear,
                     in: Capsule()
@@ -4763,8 +5710,8 @@ struct MenuContentView: View {
 
             Spacer()
         }
-        .frame(height: 24)
-        .padding(.top, 4)
+        .frame(height: 21)
+        .padding(.top, 2)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
@@ -4827,7 +5774,7 @@ struct MenuContentView: View {
             if index < items.count - 1 {
                 Divider()
                     .opacity(0.55)
-                    .padding(.leading, 38)
+                    .padding(.leading, 32)
             }
         }
     }

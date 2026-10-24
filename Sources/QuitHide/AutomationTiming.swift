@@ -34,6 +34,15 @@ enum RuntimeApplicationIdentity {
     }
 }
 
+enum ApplicationForegroundPolicy {
+    static func isActive(
+        processIdentifier: Int32,
+        frontmostProcessIdentifier: Int32?
+    ) -> Bool {
+        processIdentifier == frontmostProcessIdentifier
+    }
+}
+
 enum ApplicationUnhidePolicy {
     static func shouldRestartTimer(
         actionIsAutomated: Bool,
@@ -41,6 +50,17 @@ enum ApplicationUnhidePolicy {
         applicationIsHeld: Bool = false
     ) -> Bool {
         actionIsAutomated && !applicationIsActive && !applicationIsHeld
+    }
+}
+
+enum ApplicationMinimizedWindowProtectionPolicy {
+    static func shouldHoldQuitCountdown(
+        action: AutoAction,
+        hasMinimizedWindow: Bool,
+        windowStateIsUnavailable: Bool = false
+    ) -> Bool {
+        action == .quit &&
+            (hasMinimizedWindow || windowStateIsUnavailable)
     }
 }
 

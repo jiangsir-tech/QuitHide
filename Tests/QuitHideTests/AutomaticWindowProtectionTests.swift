@@ -48,13 +48,13 @@ struct AutomaticWindowProtectionTests {
         ) == .legacy)
     }
 
-    @Test("Foreground Stage Manager windows are presented as in use")
+    @Test("Foreground Stage Manager windows name their protection reason")
     func foregroundStageManagerWindowsAreInUse() {
         #expect(AutomaticWindowProtectionRowStatusPolicy.status(
             activeMode: .stageManager,
             bundleIsProtected: true,
             stageManagerHoldReasons: [.foregroundGroup]
-        ) == .inUse)
+        ) == .stageManagerForegroundGroupProtected)
 
         #expect(AutomaticWindowProtectionRowStatusPolicy.status(
             activeMode: .stageManager,
@@ -63,7 +63,7 @@ struct AutomaticWindowProtectionTests {
                 .foregroundGroup,
                 .explicitIgnoreAnchor
             ]
-        ) == .inUse)
+        ) == .stageManagerForegroundGroupProtected)
     }
 
     @Test("Only an Ignore-anchored sidebar group uses the group protection label")
@@ -81,13 +81,13 @@ struct AutomaticWindowProtectionTests {
         ) == nil)
     }
 
-    @Test("Visible windows use the same in-use label while Stage Manager is off")
+    @Test("Visible windows name their protection reason while Stage Manager is off")
     func screenVisibleWindowsAreInUse() {
         #expect(AutomaticWindowProtectionRowStatusPolicy.status(
             activeMode: .screenVisibility,
             bundleIsProtected: true,
             stageManagerHoldReasons: []
-        ) == .inUse)
+        ) == .screenVisibilityProtected)
 
         #expect(AutomaticWindowProtectionRowStatusPolicy.status(
             activeMode: .unavailable,
@@ -214,6 +214,89 @@ struct AutomaticWindowProtectionTests {
                 isProtected: true
             ).tone == .error
         )
+        let deferred = AppAutomationStatus(
+            text: "Deferred",
+            isProtected: true,
+            isDeferred: true
+        )
+        #expect(deferred.isDeferred)
+        #expect(deferred.tone == .protected)
+        #expect(AppAutomationStatus(
+            text: "Quit pending",
+            isWarning: true,
+            isDeferred: true
+        ).tone == .warning)
+    }
+
+    @Test("Mixed instance status reports the deferred count")
+    func mixedDeferredInstanceCount() {
+        let deferred = AppAutomationStatus(
+            text: "Deferred",
+            isProtected: true,
+            isDeferred: true
+        )
+        let active = AppAutomationStatus(text: "Active")
+
+        #expect(AppAutomationStatus.mixedDeferredInstanceCount(
+            [deferred, active],
+            totalInstances: 2
+        ) == 1)
+        #expect(AppAutomationStatus.mixedDeferredInstanceCount(
+            [deferred],
+            totalInstances: 1
+        ) == nil)
+        #expect(AppAutomationStatus.mixedDeferredInstanceCount(
+            [active, active],
+            totalInstances: 2
+        ) == nil)
+    }
+
+    @Test("A pending instance operation remains visible beside a deferral")
+    func mixedOperationAndDeferralSummaryKeepsOperationCount() {
+        let operation = AppAutomationStatus(
+            text: "Quit in progress",
+            isOperationInProgress: true
+        )
+        let deferred = AppAutomationStatus(
+            text: "Deferred",
+            isProtected: true,
+            isDeferred: true
+        )
+
+        #expect(operation.isOperationInProgress)
+        #expect(AppAutomationStatus.operationInProgressInstanceCount(
+            [operation, deferred]
+        ) == 1)
+    }
+
+    @Test("Deferral countdown can replace completed hide status but not active operations")
+    func deferralPrecedesCompletedHideUnlessOperationHasPriority() {
+        #expect(AppAutomationStatus.shouldPresentDeferralInsteadOfCompletedHide(
+            isDeferred: true,
+            hasHigherPriorityStatus: false
+        ))
+        #expect(!AppAutomationStatus.shouldPresentDeferralInsteadOfCompletedHide(
+            isDeferred: true,
+            hasHigherPriorityStatus: true
+        ))
+        #expect(!AppAutomationStatus.shouldPresentDeferralInsteadOfCompletedHide(
+            isDeferred: false,
+            hasHigherPriorityStatus: false
+        ))
+    }
+
+    @Test("Completed one-shot hide remains visible for an automatic-quit rule")
+    func completedManualHideStatusSurvivesAutomaticQuitPolicy() {
+        #expect(AppAutomationStatus.shouldPresentCompletedHide(
+            automaticAction: .quit,
+            oneShotAction: .hide,
+            hideIsCompleted: true
+        ))
+        #expect(!AppAutomationStatus.shouldPresentCompletedHide(
+            automaticAction: .quit,
+            oneShotAction: nil,
+            hideIsCompleted: true
+        ))
     }
 
     @Test("A dynamic protection snapshot is used for only one automatic action")

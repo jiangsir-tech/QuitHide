@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_DIR="${0:A:h:h}"
 INFO_PLIST="$PROJECT_DIR/Resources/Info.plist"
 DMG_BACKGROUND_SOURCE="$PROJECT_DIR/Resources/DMGBackground.svg"
+DMG_BACKGROUND_RENDERER="$PROJECT_DIR/scripts/render-dmg-background.swift"
 DMG_LAYOUT_SCRIPT="$PROJECT_DIR/scripts/configure-dmg-layout.applescript"
 DMG_LAYOUT_VERIFIER="$PROJECT_DIR/scripts/verify-dmg-layout.sh"
 DMG_IMAGE_VERIFIER="$PROJECT_DIR/scripts/verify-dmg-image.sh"
@@ -82,10 +83,11 @@ QUITHIDE_OUTPUT_DIR="$SAFE_BUILD_DIR" "$PROJECT_DIR/scripts/build-app.sh"
 /bin/mkdir -p "$DMG_BACKGROUND_DIR"
 /usr/bin/ditto --norsrc "$SOURCE_APP" "$DMG_CONTENTS_DIR/QuitHide.app"
 /bin/ln -s /Applications "$DMG_CONTENTS_DIR/Applications"
-/usr/bin/sips \
-    -s format png \
+/usr/bin/swift "$DMG_BACKGROUND_RENDERER" \
     "$DMG_BACKGROUND_SOURCE" \
-    --out "$DMG_BACKGROUND_PATH" >/dev/null
+    "$DMG_BACKGROUND_PATH" \
+    660 \
+    420
 
 BACKGROUND_WIDTH="$(/usr/bin/sips -g pixelWidth "$DMG_BACKGROUND_PATH" | /usr/bin/awk '/pixelWidth/ {print $2}')"
 BACKGROUND_HEIGHT="$(/usr/bin/sips -g pixelHeight "$DMG_BACKGROUND_PATH" | /usr/bin/awk '/pixelHeight/ {print $2}')"

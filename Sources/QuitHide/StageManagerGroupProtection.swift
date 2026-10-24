@@ -268,12 +268,14 @@ enum ApplicationIdleTimerPolicy {
         actionIsAutomated: Bool,
         applicationIsActive: Bool,
         applicationIsHeld: Bool,
+        applicationHasVisibleWindowOnAnotherSpace: Bool = false,
         hasTimer: Bool,
         forceRestart: Bool = false
     ) -> ApplicationIdleTimerDirective {
         guard actionIsAutomated,
               !applicationIsActive,
-              !applicationIsHeld else {
+              !applicationIsHeld,
+              !applicationHasVisibleWindowOnAnotherSpace else {
             return .clear
         }
         return !hasTimer || forceRestart ? .startNow : .preserve

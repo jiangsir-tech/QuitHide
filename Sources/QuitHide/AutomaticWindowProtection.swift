@@ -10,6 +10,8 @@ enum AutomaticWindowProtectionMode: Sendable, Equatable {
 enum AutomaticWindowProtectionRowStatus: Sendable, Equatable {
     case inUse
     case stageManagerGroupProtected
+    case screenVisibilityProtected
+    case stageManagerForegroundGroupProtected
 }
 
 enum AutomaticWindowProtectionRowStatusPolicy {
@@ -22,10 +24,10 @@ enum AutomaticWindowProtectionRowStatusPolicy {
 
         switch activeMode {
         case .screenVisibility:
-            return .inUse
+            return .screenVisibilityProtected
         case .stageManager:
             if stageManagerHoldReasons.contains(.foregroundGroup) {
-                return .inUse
+                return .stageManagerForegroundGroupProtected
             }
             if stageManagerHoldReasons.contains(.explicitIgnoreAnchor) {
                 return .stageManagerGroupProtected
